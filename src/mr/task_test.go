@@ -10,7 +10,7 @@ import (
 
 func echo(mngr BatchTaskManager) {
 	for {
-		task := mngr.Take()
+		task := mngr.Take(1)
 		if task == nil {
 			return
 		}
@@ -20,7 +20,7 @@ func echo(mngr BatchTaskManager) {
 
 func fail(mngr BatchTaskManager) {
 	for {
-		task := mngr.Take()
+		task := mngr.Take(1)
 		if task == nil {
 			return
 		}
@@ -30,7 +30,7 @@ func fail(mngr BatchTaskManager) {
 
 func delay(mngr BatchTaskManager) {
 	for {
-		task := mngr.Take()
+		task := mngr.Take(1)
 		if task == nil {
 			return
 		}

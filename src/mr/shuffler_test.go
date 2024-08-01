@@ -39,7 +39,7 @@ func Test_JsonStore(t *testing.T) {
 func Test_Shuffler(t *testing.T) {
 	rq := require.New(t)
 
-	shuffler, err := NewInMemoryShuffler(filepath.Join(testFolder, "shuffler"))
+	shuffler, err := NewInMemoryShuffler("id", filepath.Join(testFolder, "shuffler"))
 	rq.NoError(err)
 
 	outputs, err := shuffler.Shuffle([]string{
