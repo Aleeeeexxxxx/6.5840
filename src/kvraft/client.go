@@ -1,13 +1,25 @@
 package kvraft
 
-import "6.5840/labrpc"
-import "crypto/rand"
-import "math/big"
+import (
+	"crypto/rand"
+	"math/big"
+	"sync"
+	"time"
 
+	"6.5840/labrpc"
+	"go.uber.org/zap"
+)
+
+var globalClerkInstanceID = 0
+
+const retryInterval = time.Second
 
 type Clerk struct {
-	servers []*labrpc.ClientEnd
-	// You will have to modify this struct.
+	id       int
+	leaderID int
+	servers  []*labrpc.ClientEnd
+	mutext   sync.Mutex
+	logger   *zap.Logger
 }
 
 func nrand() int64 {
@@ -18,9 +30,16 @@ func nrand() int64 {
 }
 
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
+	globalClerkInstanceID++
+
 	ck := new(Clerk)
 	ck.servers = servers
-	// You'll have to add code here.
+	ck.id = globalClerkInstanceID
+	ck.leaderID = int(nrand()) % len(servers)
+	ck.logger = GetLoggerOrPanic("follower").With(zap.Int("clerk", ck.id))
+
+	ck.logger.Info("create new client")
+
 	return ck
 }
 
@@ -35,9 +54,21 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 // must match the declared types of the RPC handler function's
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) string {
+	ck.mutext.Lock()
+	defer ck.mutext.Unlock()
 
-	// You will have to modify this function.
-	return ""
+	ck.logger.Info("client op: Get", zap.String("key", key))
+
+	args := &GetArgs{
+		Key:      key,
+		Metadata: ck.metadata(),
+	}
+	reply := &GetReply{}
+
+	ck.call("KVServer.Get", args, reply)
+
+	ck.logger.Info("client op: Get", zap.String("result", reply.Value))
+	return reply.Value
 }
 
 // shared by Put and Append.
@@ -49,7 +80,24 @@ func (ck *Clerk) Get(key string) string {
 // must match the declared types of the RPC handler function's
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) PutAppend(key string, value string, op string) {
-	// You will have to modify this function.
+	ck.mutext.Lock()
+	defer ck.mutext.Unlock()
+
+	ck.logger.Info(
+		"client op: PutAppend",
+		zap.String("key", key),
+		zap.String("value", value),
+		zap.String("op", op),
+	)
+
+	args := &PutAppendArgs{
+		Key:      key,
+		Metadata: ck.metadata(),
+	}
+	reply := &PutAppendReply{}
+
+	ck.call("KVServer.PutAppend", args, reply)
+	ck.logger.Info("client op: PutAppend succeed", zap.String("op", op))
 }
 
 func (ck *Clerk) Put(key string, value string) {
@@ -57,4 +105,54 @@ func (ck *Clerk) Put(key string, value string) {
 }
 func (ck *Clerk) Append(key string, value string) {
 	ck.PutAppend(key, value, "Append")
+}
+
+func (ck *Clerk) call(method string, args Args, reply Reply) {
+	count := 0
+
+	for {
+		count++
+		ck.logger.Info(
+			"call rpc",
+			zap.String("method", method),
+			zap.Int("count", count),
+			zap.Int("leaderID", ck.leaderID),
+			zap.String("args", args.String()),
+		)
+
+		ch := make(chan bool, 1)
+		timer := time.NewTimer(retryInterval)
+
+		go func() {
+			c := ck.servers[ck.leaderID]
+			select {
+			case ch <- c.Call(method, args, reply):
+			case <-timer.C:
+			}
+			close(ch)
+		}()
+
+		select {
+		case <-timer.C:
+			ck.logger.Warn("timeout waiting for rpc call, will retry")
+		case ok := <-ch:
+			ck.logger.Debug("got rpc response", zap.String("reply", reply.String()))
+			if ok && reply.Accept() {
+				ck.logger.Info("call rpc successfully")
+				return
+			} else {
+				ck.logger.Info("wrong leader, will retry")
+			}
+			ck.logger.Warn("network issue, will retry")
+		}
+
+		ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
+	}
+}
+
+func (ck *Clerk) metadata() Metadata {
+	return Metadata{
+		ClerkID:   ck.id,
+		MessageID: time.Now().Unix(),
+	}
 }
