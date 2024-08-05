@@ -5,15 +5,17 @@ import (
 )
 
 const (
-	OK             = "OK"
-	ErrNoKey       = "ErrNoKey"
-	ErrWrongLeader = "ErrWrongLeader"
+	OK              = "OK"
+	ErrNoKey        = "ErrNoKey"
+	ErrWrongLeader  = "ErrWrongLeader"
+	ErrDuplicateReq = "ErrDuplicateReq"
+	ErrTimeout      = "ErrTimeout"
 )
 
 type Err string
 
 type Metadata struct {
-	ClerkID   int
+	ClerkID   int32
 	MessageID int64
 }
 

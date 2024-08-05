@@ -33,3 +33,11 @@ func GetLoggerOrPanic(component string) *zap.Logger {
 }
 
 const LoggerComponent = "component"
+
+const (
+	LogClerkID   = "clerk"
+	LogMessageID = "msgID"
+	LogCMDIndex  = "cmdIndex"
+	LogKey       = "key"
+	LogValue     = "value"
+)

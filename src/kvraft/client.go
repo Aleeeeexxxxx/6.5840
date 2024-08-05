@@ -4,18 +4,19 @@ import (
 	"crypto/rand"
 	"math/big"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"6.5840/labrpc"
 	"go.uber.org/zap"
 )
 
-var globalClerkInstanceID = 0
+var globalClerkInstanceID int32 = 0
 
 const retryInterval = time.Second
 
 type Clerk struct {
-	id       int
+	id       int32
 	leaderID int
 	servers  []*labrpc.ClientEnd
 	mutext   sync.Mutex
@@ -30,13 +31,11 @@ func nrand() int64 {
 }
 
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
-	globalClerkInstanceID++
-
 	ck := new(Clerk)
 	ck.servers = servers
-	ck.id = globalClerkInstanceID
+	ck.id = atomic.AddInt32(&globalClerkInstanceID, 1)
 	ck.leaderID = int(nrand()) % len(servers)
-	ck.logger = GetLoggerOrPanic("follower").With(zap.Int("clerk", ck.id))
+	ck.logger = GetLoggerOrPanic("follower").With(zap.Int32("clerk", ck.id))
 
 	ck.logger.Info("create new client")
 
@@ -85,9 +84,9 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 
 	ck.logger.Info(
 		"client op: PutAppend",
-		zap.String("key", key),
-		zap.String("value", value),
-		zap.String("op", op),
+		zap.String(LogKey, key),
+		zap.String(LogValue, value),
+		zap.String("subOp", op),
 	)
 
 	args := &PutAppendArgs{
