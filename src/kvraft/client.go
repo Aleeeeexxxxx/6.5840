@@ -56,17 +56,21 @@ func (ck *Clerk) Get(key string) string {
 	ck.mutext.Lock()
 	defer ck.mutext.Unlock()
 
-	ck.logger.Info("client op: Get", zap.String("key", key))
+	metadata := ck.metadata()
+	logger := ck.logger.
+		With(zap.Int32(LogClerkID, metadata.ClerkID)).
+		With(zap.Int64(LogMessageID, metadata.MessageID))
+	ck.logger.Info("submit client op: Get", zap.String(LogKey, key))
 
 	args := &GetArgs{
 		Key:      key,
-		Metadata: ck.metadata(),
+		Metadata: metadata,
 	}
 	reply := &GetReply{}
 
-	ck.call("KVServer.Get", args, reply)
+	ck.call("KVServer.Get", args, reply, logger)
 
-	ck.logger.Info("client op: Get", zap.String("result", reply.Value))
+	ck.logger.Info("client op: Get succeed", zap.String("result", reply.Value))
 	return reply.Value
 }
 
@@ -82,21 +86,26 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 	ck.mutext.Lock()
 	defer ck.mutext.Unlock()
 
-	ck.logger.Info(
-		"client op: PutAppend",
+	metadata := ck.metadata()
+	logger := ck.logger.
+		With(zap.Int32(LogClerkID, metadata.ClerkID)).
+		With(zap.Int64(LogMessageID, metadata.MessageID))
+	logger.Info(
+		"submit client op, PutAppend",
 		zap.String(LogKey, key),
 		zap.String(LogValue, value),
+		zap.String("op", "PutAppend"),
 		zap.String("subOp", op),
 	)
 
 	args := &PutAppendArgs{
 		Key:      key,
-		Metadata: ck.metadata(),
+		Metadata: metadata,
 	}
 	reply := &PutAppendReply{}
 
-	ck.call("KVServer.PutAppend", args, reply)
-	ck.logger.Info("client op: PutAppend succeed", zap.String("op", op))
+	ck.call("KVServer.PutAppend", args, reply, logger)
+	logger.Info("client op: PutAppend succeed")
 }
 
 func (ck *Clerk) Put(key string, value string) {
@@ -106,12 +115,12 @@ func (ck *Clerk) Append(key string, value string) {
 	ck.PutAppend(key, value, "Append")
 }
 
-func (ck *Clerk) call(method string, args Args, reply Reply) {
+func (ck *Clerk) call(method string, args Args, reply Reply, logger *zap.Logger) {
 	count := 0
 
 	for {
 		count++
-		ck.logger.Info(
+		logger.Info(
 			"call rpc",
 			zap.String("method", method),
 			zap.Int("count", count),
@@ -133,16 +142,16 @@ func (ck *Clerk) call(method string, args Args, reply Reply) {
 
 		select {
 		case <-timer.C:
-			ck.logger.Warn("timeout waiting for rpc call, will retry")
+			logger.Warn("timeout waiting for rpc call, will retry")
 		case ok := <-ch:
-			ck.logger.Debug("got rpc response", zap.String("reply", reply.String()))
+			logger.Debug("got rpc response", zap.String("reply", reply.String()))
 			if ok && reply.Accept() {
-				ck.logger.Info("call rpc successfully")
+				logger.Info("call rpc successfully")
 				return
 			} else {
-				ck.logger.Info("wrong leader, will retry")
+				logger.Info("wrong leader, will retry")
 			}
-			ck.logger.Warn("network issue, will retry")
+			logger.Warn("network issue, will retry")
 		}
 
 		ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
