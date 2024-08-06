@@ -11,20 +11,20 @@ type Client struct {
 	value     string
 }
 
-type ClientMngr struct {
+type ClerkStorage struct {
 	mutex  sync.RWMutex
 	data   map[int32]*Client
 	logger *zap.Logger
 }
 
-func NewClerkMngr(me int) *ClientMngr {
-	return &ClientMngr{
+func NewClerkStorage(me int) *ClerkStorage {
+	return &ClerkStorage{
 		data:   make(map[int32]*Client),
 		logger: GetLoggerOrPanic("storage").With(zap.Int("me", me)),
 	}
 }
 
-func (cm *ClientMngr) GetOpValue(metadata Metadata) (string, bool) {
+func (cm *ClerkStorage) GetOpValue(metadata Metadata) (string, bool) {
 	logger := cm.logger.With(
 		zap.Int32(LogClerkID, metadata.ClerkID),
 		zap.Int64(LogMessageID, metadata.MessageID),
@@ -55,7 +55,7 @@ func (cm *ClientMngr) GetOpValue(metadata Metadata) (string, bool) {
 	return "", false
 }
 
-func (cm *ClientMngr) AppendNewOp(op *Op) {
+func (cm *ClerkStorage) AppendNewOp(op *Op) {
 	logger := cm.logger.With(
 		zap.Int32(LogClerkID, op.metadata.ClerkID),
 		zap.Int64(LogMessageID, op.metadata.MessageID),
@@ -65,7 +65,8 @@ func (cm *ClientMngr) AppendNewOp(op *Op) {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
-	c, ok := cm.data[op.metadata.ClerkID]
+	key := op.metadata.ClerkID
+	c, ok := cm.data[key]
 	if ok {
 		if c.messageID >= op.metadata.MessageID {
 			logger.Info(

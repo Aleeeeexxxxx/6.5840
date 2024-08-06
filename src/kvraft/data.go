@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type Storage struct {
+type DataStorage struct {
 	mutex            sync.Mutex
 	data             map[string]string
 	lastAppliedIndex int
@@ -15,15 +15,15 @@ type Storage struct {
 	logger *zap.Logger
 }
 
-func NewStorage(me int) *Storage {
-	return &Storage{
+func NewDataStorage(me int) *DataStorage {
+	return &DataStorage{
 		data:             make(map[string]string),
 		lastAppliedIndex: -1,
 		logger:           GetLoggerOrPanic("storage").With(zap.Int("me", me)),
 	}
 }
 
-func (st *Storage) ApplyCommand(index int, command *Op) (string, Err) {
+func (st *DataStorage) ApplyCommand(index int, command *Op) (string, Err) {
 	logger := st.logger.
 		With(zap.Int("cmd index", index)).
 		With(zap.Int32("clerk", command.metadata.ClerkID)).
@@ -66,11 +66,11 @@ func (st *Storage) ApplyCommand(index int, command *Op) (string, Err) {
 	return val, OK
 }
 
-func (st *Storage) put(key, val string) {
+func (st *DataStorage) put(key, val string) {
 	st.data[key] = val
 }
 
-func (st *Storage) putAppend(key, val string) {
+func (st *DataStorage) putAppend(key, val string) {
 	v, ok := st.data[key]
 	if !ok {
 		st.data[key] = val

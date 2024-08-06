@@ -18,17 +18,18 @@ type Op struct {
 }
 
 type KVServer struct {
-	me      int
-	rf      *raft.Raft
-	applyCh chan raft.ApplyMsg
-	dead    int32 // set by Kill()
+	me     int
+	logger *zap.Logger
 
+	rf           *raft.Raft
+	applyCh      chan raft.ApplyMsg
 	maxraftstate int // snapshot if log grows this big
-	logger       *zap.Logger
 
-	clients  *ClientMngr
+	dead     int32 // set by Kill()
 	requests *RequestMngr
-	storage  *Storage
+
+	clients *ClerkStorage
+	storage *DataStorage
 }
 
 func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister, maxraftstate int) *KVServer {
@@ -45,9 +46,9 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	kv.logger = GetLoggerOrPanic("kv server").With(zap.Int("me", me))
 
-	kv.clients = NewClerkMngr(me)
+	kv.clients = NewClerkStorage(me)
 	kv.requests = NewRequestMngr(me)
-	kv.storage = NewStorage(me)
+	kv.storage = NewDataStorage(me)
 
 	go kv.listen()
 	return kv

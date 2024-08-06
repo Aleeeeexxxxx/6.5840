@@ -16,11 +16,11 @@ var globalClerkInstanceID int32 = 0
 const retryInterval = time.Second
 
 type Clerk struct {
-	id       int32
-	leaderID int
-	servers  []*labrpc.ClientEnd
-	mutext   sync.Mutex
-	logger   *zap.Logger
+	id                int32
+	leaderID          int
+	servers           []*labrpc.ClientEnd
+	singleRequestLock sync.Mutex
+	logger            *zap.Logger
 }
 
 func nrand() int64 {
@@ -53,8 +53,8 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 // must match the declared types of the RPC handler function's
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) string {
-	ck.mutext.Lock()
-	defer ck.mutext.Unlock()
+	ck.singleRequestLock.Lock()
+	defer ck.singleRequestLock.Unlock()
 
 	metadata := ck.metadata()
 	logger := ck.logger.
@@ -83,8 +83,8 @@ func (ck *Clerk) Get(key string) string {
 // must match the declared types of the RPC handler function's
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) PutAppend(key string, value string, op string) {
-	ck.mutext.Lock()
-	defer ck.mutext.Unlock()
+	ck.singleRequestLock.Lock()
+	defer ck.singleRequestLock.Unlock()
 
 	metadata := ck.metadata()
 	logger := ck.logger.
