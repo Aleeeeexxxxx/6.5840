@@ -12,8 +12,11 @@ func GetBaseLogger() (*zap.Logger, error) {
 		cfg := zap.NewProductionConfig()
 		cfg.Level = zap.NewAtomicLevelAt(zap.ErrorLevel)
 		return cfg.Build()
+	} else {
+		cfg := zap.NewDevelopmentConfig()
+		cfg.EncoderConfig.StacktraceKey = ""
+		return cfg.Build()
 	}
-	return zap.NewDevelopment()
 }
 
 func GetLogger(component string) (*zap.Logger, error) {
@@ -40,4 +43,5 @@ const (
 	LogCMDIndex  = "cmdIndex"
 	LogKey       = "key"
 	LogValue     = "value"
+	LogLeaderID  = "leaderID"
 )

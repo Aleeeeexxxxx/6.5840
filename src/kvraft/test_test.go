@@ -1,16 +1,21 @@
 package kvraft
 
-import "6.5840/porcupine"
-import "6.5840/models"
-import "testing"
-import "strconv"
-import "time"
-import "math/rand"
-import "strings"
-import "sync"
-import "sync/atomic"
-import "fmt"
-import "io/ioutil"
+import (
+	"fmt"
+	"io/ioutil"
+	"math/rand"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"6.5840/models"
+	"6.5840/porcupine"
+)
+
+var logger = GetLoggerOrPanic("test")
 
 // The tester generously allows solutions to complete elections in one second
 // (much more than the paper's range of timeouts).
@@ -47,6 +52,7 @@ var t0 = time.Now()
 func Get(cfg *config, ck *Clerk, key string, log *OpLog, cli int) string {
 	start := int64(time.Since(t0))
 	v := ck.Get(key)
+	logger.Info(fmt.Sprintf("[%d] Get, key=%s, value=%s", ck.id, key, v))
 	end := int64(time.Since(t0))
 	cfg.op()
 	if log != nil {
@@ -65,6 +71,9 @@ func Get(cfg *config, ck *Clerk, key string, log *OpLog, cli int) string {
 func Put(cfg *config, ck *Clerk, key string, value string, log *OpLog, cli int) {
 	start := int64(time.Since(t0))
 	ck.Put(key, value)
+
+	logger.Info(fmt.Sprintf("[%d] Put, key=%s, value=%s", ck.id, key, value))
+
 	end := int64(time.Since(t0))
 	cfg.op()
 	if log != nil {
@@ -81,6 +90,9 @@ func Put(cfg *config, ck *Clerk, key string, value string, log *OpLog, cli int) 
 func Append(cfg *config, ck *Clerk, key string, value string, log *OpLog, cli int) {
 	start := int64(time.Since(t0))
 	ck.Append(key, value)
+
+	logger.Info(fmt.Sprintf("[%d] Append, key=%s, value=%s", ck.id, key, value))
+
 	end := int64(time.Since(t0))
 	cfg.op()
 	if log != nil {
@@ -104,10 +116,17 @@ func check(cfg *config, t *testing.T, ck *Clerk, key string, value string) {
 // a client runs the function f and then signals it is done
 func run_client(t *testing.T, cfg *config, me int, ca chan bool, fn func(me int, ck *Clerk, t *testing.T)) {
 	ok := false
-	defer func() { ca <- ok }()
+	defer func() {
+		logger.Debug(fmt.Sprintf("call defer function, set ok:%v to ca", ok))
+		ca <- ok
+	}()
+
 	ck := cfg.makeClient(cfg.All())
 	fn(me, ck, t)
+
 	ok = true
+	logger.Info("run_client ok set to true")
+
 	cfg.deleteClient(ck)
 }
 
@@ -118,12 +137,17 @@ func spawn_clients_and_wait(t *testing.T, cfg *config, ncli int, fn func(me int,
 		ca[cli] = make(chan bool)
 		go run_client(t, cfg, cli, ca[cli], fn)
 	}
-	// log.Printf("spawn_clients_and_wait: waiting for clients")
+
+	logger.Info("spawn_clients_and_wait: waiting for clients")
+
 	for cli := 0; cli < ncli; cli++ {
 		ok := <-ca[cli]
-		// log.Printf("spawn_clients_and_wait: client %d is done\n", cli)
+
+		logger.Info(fmt.Sprintf("spawn_clients_and_wait: client %d is done", cli))
+
 		if ok == false {
-			t.Fatalf("failure")
+			msg := fmt.Sprintf("failure, cli=%d", cli)
+			panic(msg)
 		}
 	}
 }
@@ -253,7 +277,8 @@ func GenericTest(t *testing.T, part string, nclients int, nservers int, unreliab
 		clnts[i] = make(chan int)
 	}
 	for i := 0; i < 3; i++ {
-		// log.Printf("Iteration %v\n", i)
+		logger.Info(fmt.Sprintf("Iteration %v", i))
+
 		atomic.StoreInt32(&done_clients, 0)
 		atomic.StoreInt32(&done_partitioner, 0)
 		go spawn_clients_and_wait(t, cfg, nclients, func(cli int, myck *Clerk, t *testing.T) {
@@ -290,10 +315,12 @@ func GenericTest(t *testing.T, part string, nclients int, nservers int, unreliab
 					v := Get(cfg, myck, key, opLog, cli)
 					// the following check only makes sense when we're not using random keys
 					if !randomkeys && v != last {
-						t.Fatalf("get wrong value, key %v, wanted:\n%v\n, got\n%v\n", key, last, v)
+						msg := fmt.Sprintf("get wrong value, ck id=%d, key %v, wanted:%v, got: %v", myck.id, key, last, v)
+						panic(msg)
 					}
 				}
 			}
+			logger.Info("clerk finish running")
 		})
 
 		if partitions {
@@ -303,6 +330,7 @@ func GenericTest(t *testing.T, part string, nclients int, nservers int, unreliab
 		}
 		time.Sleep(5 * time.Second)
 
+		logger.Info("stop the clerks")
 		atomic.StoreInt32(&done_clients, 1)     // tell clients to quit
 		atomic.StoreInt32(&done_partitioner, 1) // tell partitioner to quit
 

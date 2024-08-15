@@ -20,7 +20,7 @@ type ClerkStorage struct {
 func NewClerkStorage(me int) *ClerkStorage {
 	return &ClerkStorage{
 		data:   make(map[int32]*Client),
-		logger: GetLoggerOrPanic("storage").With(zap.Int("me", me)),
+		logger: GetLoggerOrPanic("clerk storage").With(zap.Int("me", me)),
 	}
 }
 
@@ -57,30 +57,30 @@ func (cm *ClerkStorage) GetOpValue(metadata Metadata) (string, bool) {
 
 func (cm *ClerkStorage) AppendNewOp(op *Op) {
 	logger := cm.logger.With(
-		zap.Int32(LogClerkID, op.metadata.ClerkID),
-		zap.Int64(LogMessageID, op.metadata.MessageID),
+		zap.Int32(LogClerkID, op.Metadata.ClerkID),
+		zap.Int64(LogMessageID, op.Metadata.MessageID),
 	)
 	logger.Debug("append new op")
 
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
-	key := op.metadata.ClerkID
+	key := op.Metadata.ClerkID
 	c, ok := cm.data[key]
 	if ok {
-		if c.messageID >= op.metadata.MessageID {
+		if c.messageID >= op.Metadata.MessageID {
 			logger.Info(
 				"op message id is smaller than current, skip append",
-				zap.Int64("current msgID", c.messageID),
+				zap.Int64(LogMessageID, c.messageID),
 			)
 			return
 		}
 	} else {
 		c = &Client{}
-		cm.data[op.metadata.ClerkID] = c
+		cm.data[op.Metadata.ClerkID] = c
 	}
 
-	c.messageID = op.metadata.MessageID
+	c.messageID = op.Metadata.MessageID
 	c.value = op.Value
 	logger.Info("new op appended")
 }

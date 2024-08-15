@@ -18,7 +18,9 @@ const retryInterval = time.Second
 type Clerk struct {
 	id                int32
 	leaderID          int
+	currentMessageID  int64
 	servers           []*labrpc.ClientEnd
+	realLeaderIDs     []int
 	singleRequestLock sync.Mutex
 	logger            *zap.Logger
 }
@@ -31,14 +33,18 @@ func nrand() int64 {
 }
 
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
+	svrs, realLeaderIDs := random_handles(servers)
+	servers = svrs
+
 	ck := new(Clerk)
 	ck.servers = servers
 	ck.id = atomic.AddInt32(&globalClerkInstanceID, 1)
 	ck.leaderID = int(nrand()) % len(servers)
-	ck.logger = GetLoggerOrPanic("follower").With(zap.Int32("clerk", ck.id))
+	ck.logger = GetLoggerOrPanic("client").With(zap.Int32(LogClerkID, ck.id))
+	ck.currentMessageID = 0
+	ck.realLeaderIDs = realLeaderIDs
 
-	ck.logger.Info("create new client")
-
+	ck.logger.Info("create new client", zap.Int32(LogClerkID, ck.id))
 	return ck
 }
 
@@ -58,11 +64,16 @@ func (ck *Clerk) Get(key string) string {
 
 	metadata := ck.metadata()
 	logger := ck.logger.
-		With(zap.Int32(LogClerkID, metadata.ClerkID)).
 		With(zap.Int64(LogMessageID, metadata.MessageID))
-	ck.logger.Info("submit client op: Get", zap.String(LogKey, key))
+	defer logger.Sync()
 
-	args := &GetArgs{
+	logger.Info(
+		"submit client op: Get",
+		zap.String(LogKey, key),
+		zap.Int(LogLeaderID, ck.getCurrentLeaderID()),
+	)
+
+	args := GetArgs{
 		Key:      key,
 		Metadata: metadata,
 	}
@@ -70,7 +81,11 @@ func (ck *Clerk) Get(key string) string {
 
 	ck.call("KVServer.Get", args, reply, logger)
 
-	ck.logger.Info("client op: Get succeed", zap.String("result", reply.Value))
+	logger.Info(
+		"client op: Get succeed",
+		zap.String("result", reply.Value),
+		zap.Int(LogLeaderID, ck.getCurrentLeaderID()),
+	)
 	return reply.Value
 }
 
@@ -88,24 +103,31 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 
 	metadata := ck.metadata()
 	logger := ck.logger.
-		With(zap.Int32(LogClerkID, metadata.ClerkID)).
 		With(zap.Int64(LogMessageID, metadata.MessageID))
+	defer logger.Sync()
+
 	logger.Info(
 		"submit client op, PutAppend",
 		zap.String(LogKey, key),
 		zap.String(LogValue, value),
 		zap.String("op", "PutAppend"),
 		zap.String("subOp", op),
+		zap.Int(LogLeaderID, ck.getCurrentLeaderID()),
 	)
 
-	args := &PutAppendArgs{
+	args := PutAppendArgs{
 		Key:      key,
 		Metadata: metadata,
+		Op:       op,
+		Value:    value,
 	}
 	reply := &PutAppendReply{}
 
 	ck.call("KVServer.PutAppend", args, reply, logger)
-	logger.Info("client op: PutAppend succeed")
+	logger.Info(
+		"client op: PutAppend succeed",
+		zap.Int(LogLeaderID, ck.getCurrentLeaderID()),
+	)
 }
 
 func (ck *Clerk) Put(key string, value string) {
@@ -120,11 +142,13 @@ func (ck *Clerk) call(method string, args Args, reply Reply, logger *zap.Logger)
 
 	for {
 		count++
-		logger.Info(
+		subLogger := logger.
+			With(zap.Int("count", count)).
+			With(zap.Int(LogLeaderID, ck.getCurrentLeaderID()))
+
+		subLogger.Info(
 			"call rpc",
 			zap.String("method", method),
-			zap.Int("count", count),
-			zap.Int("leaderID", ck.leaderID),
 			zap.String("args", args.String()),
 		)
 
@@ -142,25 +166,33 @@ func (ck *Clerk) call(method string, args Args, reply Reply, logger *zap.Logger)
 
 		select {
 		case <-timer.C:
-			logger.Warn("timeout waiting for rpc call, will retry")
+			subLogger.Warn("timeout waiting for rpc call, will retry")
 		case ok := <-ch:
-			logger.Debug("got rpc response", zap.String("reply", reply.String()))
-			if ok && reply.Accept() {
-				logger.Info("call rpc successfully")
-				return
+			subLogger.Debug("got rpc response", zap.String("reply", reply.String()))
+			if ok {
+				if reply.Accept() {
+					subLogger.Info("call rpc successfully")
+					return
+				} else {
+					subLogger.Info("wrong leader, will retry")
+				}
 			} else {
-				logger.Info("wrong leader, will retry")
+				subLogger.Warn("network issue, will retry")
 			}
-			logger.Warn("network issue, will retry")
 		}
 
 		ck.leaderID = (ck.leaderID + 1) % len(ck.servers)
+		subLogger.Debug("choose new leader")
 	}
 }
 
 func (ck *Clerk) metadata() Metadata {
 	return Metadata{
 		ClerkID:   ck.id,
-		MessageID: time.Now().Unix(),
+		MessageID: atomic.AddInt64(&ck.currentMessageID, 1),
 	}
+}
+
+func (ck *Clerk) getCurrentLeaderID() int {
+	return ck.realLeaderIDs[ck.leaderID]
 }

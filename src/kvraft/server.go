@@ -10,11 +10,11 @@ import (
 )
 
 type Op struct {
-	Op       string
-	SubOp    string
-	Key      string
-	Value    string
-	metadata Metadata
+	Op    string
+	SubOp string
+	Key   string
+	Value string
+	Metadata
 }
 
 type KVServer struct {
@@ -54,9 +54,9 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	return kv
 }
 
-func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
+func (kv *KVServer) Get(args GetArgs, reply *GetReply) error {
 	op := Op{
-		metadata: args.Metadata,
+		Metadata: args.Metadata,
 		Op:       "Get",
 		SubOp:    "",
 		Key:      args.Key,
@@ -64,11 +64,12 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	}
 	reply.Value, reply.Err = kv.handleOp(&op)
 	reply.Metadata = args.Metadata
+	return nil
 }
 
-func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
+func (kv *KVServer) PutAppend(args PutAppendArgs, reply *PutAppendReply) error {
 	op := Op{
-		metadata: args.Metadata,
+		Metadata: args.Metadata,
 		Op:       "Put",
 		SubOp:    args.Op,
 		Key:      args.Key,
@@ -76,12 +77,13 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	}
 	_, reply.Err = kv.handleOp(&op)
 	reply.Metadata = args.Metadata
+	return nil
 }
 
 func (kv *KVServer) handleOp(op *Op) (string, Err) {
 	logger := kv.logger.
-		With(zap.Int32(LogClerkID, op.metadata.ClerkID)).
-		With(zap.Int64(LogMessageID, op.metadata.MessageID)).
+		With(zap.Int32(LogClerkID, op.Metadata.ClerkID)).
+		With(zap.Int64(LogMessageID, op.Metadata.MessageID)).
 		With(zap.String("op", op.Op)).
 		With(zap.String("subop", op.SubOp))
 	logger.Info(
@@ -95,7 +97,7 @@ func (kv *KVServer) handleOp(op *Op) (string, Err) {
 		return "", ErrWrongLeader
 	}
 
-	if value, ok := kv.clients.GetOpValue(op.metadata); ok {
+	if value, ok := kv.clients.GetOpValue(op.Metadata); ok {
 		logger.Info(
 			"value matched from client storage",
 			zap.String("value", value),
@@ -109,7 +111,7 @@ func (kv *KVServer) handleOp(op *Op) (string, Err) {
 		return "", ErrWrongLeader
 	} else {
 		logger.Info("op submitted, waiting for apply")
-		return kv.requests.Wait(op.metadata)
+		return kv.requests.Wait(op.Metadata)
 	}
 }
 
@@ -138,12 +140,15 @@ func (kv *KVServer) listen() {
 
 func (kv *KVServer) listenCommand(index int, op Op) {
 	logger := kv.logger.
-		With(zap.Int32(LogClerkID, op.metadata.ClerkID)).
-		With(zap.Int64(LogMessageID, op.metadata.MessageID)).
+		With(zap.Int32(LogClerkID, op.Metadata.ClerkID)).
+		With(zap.Int64(LogMessageID, op.Metadata.MessageID)).
 		With(zap.Int(LogCMDIndex, index))
 	logger.Info("handle raft command msg")
 
-	kv.clients.AppendNewOp(&op)
+	// update data storage first, then clerk storage
 	value, err := kv.storage.ApplyCommand(index, &op)
-	kv.requests.Complete(op.metadata, value, err)
+	op.Value = value
+
+	kv.clients.AppendNewOp(&op)
+	kv.requests.Complete(op.Metadata, value, err)
 }

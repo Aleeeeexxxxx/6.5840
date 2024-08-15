@@ -1,20 +1,24 @@
 package kvraft
 
-import "6.5840/labrpc"
-import "testing"
-import "os"
+import (
+	"os"
+	"testing"
 
-// import "log"
-import crand "crypto/rand"
-import "math/big"
-import "math/rand"
-import "encoding/base64"
-import "sync"
-import "runtime"
-import "6.5840/raft"
-import "fmt"
-import "time"
-import "sync/atomic"
+	"6.5840/labrpc"
+
+	// import "log"
+	crand "crypto/rand"
+	"encoding/base64"
+	"fmt"
+	"math/big"
+	"math/rand"
+	"runtime"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"6.5840/raft"
+)
 
 func randstring(n int) string {
 	b := make([]byte, 2*n)
@@ -31,14 +35,21 @@ func makeSeed() int64 {
 }
 
 // Randomize server handles
-func random_handles(kvh []*labrpc.ClientEnd) []*labrpc.ClientEnd {
+func random_handles(kvh []*labrpc.ClientEnd) ([]*labrpc.ClientEnd, []int) {
 	sa := make([]*labrpc.ClientEnd, len(kvh))
+
+	switches := make([]int, 0, len(kvh))
+	for i := 0; i < len(sa); i++ {
+		switches = append(switches, i)
+	}
+
 	copy(sa, kvh)
 	for i := range sa {
 		j := rand.Intn(i + 1)
 		sa[i], sa[j] = sa[j], sa[i]
+		switches[i], switches[j] = switches[j], switches[i]
 	}
-	return sa
+	return sa, switches
 }
 
 type config struct {
@@ -201,7 +212,7 @@ func (cfg *config) makeClient(to []int) *Clerk {
 		cfg.net.Connect(endnames[j], j)
 	}
 
-	ck := MakeClerk(random_handles(ends))
+	ck := MakeClerk(ends)
 	cfg.clerks[ck] = endnames
 	cfg.nextClientId++
 	cfg.ConnectClientUnlocked(ck, to)

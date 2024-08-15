@@ -40,17 +40,15 @@ func (rm *RequestMngr) Wait(metadata Metadata) (string, Err) {
 
 	rm.inQueue(req)
 
-	go func() {
-		select {
-		case <-req.ch:
-			logger := rm.logger.
-				With(zap.Int32(LogClerkID, metadata.ClerkID)).
-				With(zap.Int64(LogMessageID, metadata.MessageID))
-			logger.Info("request finished")
-		case <-req.timer.C:
-			rm.handleTimeout(req)
-		}
-	}()
+	select {
+	case <-req.ch:
+		logger := rm.logger.
+			With(zap.Int32(LogClerkID, metadata.ClerkID)).
+			With(zap.Int64(LogMessageID, metadata.MessageID))
+		logger.Info("request finished")
+	case <-req.timer.C:
+		rm.handleTimeout(req)
+	}
 
 	return req.Value, req.Err
 }
@@ -96,7 +94,7 @@ func (rm *RequestMngr) inQueue(req *Request) {
 			"discard old one for duplicated request",
 			zap.Int64("msgID", old.Metadata.MessageID),
 		)
-		req.Err = ErrDuplicateReq
+		old.Err = ErrDuplicateReq
 		old.ch <- struct{}{}
 	}
 	rm.requests[key] = req
