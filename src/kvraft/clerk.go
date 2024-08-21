@@ -13,14 +13,14 @@ type Client struct {
 
 type ClerkStorage struct {
 	mutex  sync.RWMutex
-	data   map[int32]*Client
+	data   map[int32]*Client // ClerkID ->
 	logger *zap.Logger
 }
 
 func NewClerkStorage(me int) *ClerkStorage {
 	return &ClerkStorage{
 		data:   make(map[int32]*Client),
-		logger: GetLoggerOrPanic("clerk storage").With(zap.Int("me", me)),
+		logger: GetKVServerLoggerOrPanic("clerk storage").With(zap.Int("me", me)),
 	}
 }
 
@@ -45,6 +45,8 @@ func (cm *ClerkStorage) GetOpValue(metadata Metadata) (string, bool) {
 			return c.value, true
 		} else if metadata.MessageID < LastCommittedMsgID {
 			logger.Info("msgID smaller than committed")
+			// reply the value is safe
+			// because the request should be discard now
 			return c.value, true
 		} else {
 			logger.Info("msgID bigger than committed")

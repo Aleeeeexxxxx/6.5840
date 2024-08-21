@@ -20,7 +20,7 @@ func NewDataStorage(me int) *DataStorage {
 	return &DataStorage{
 		data:             make(map[string]string),
 		lastAppliedIndex: -1,
-		logger:           GetLoggerOrPanic("data storage").With(zap.Int("me", me)),
+		logger:           GetKVServerLoggerOrPanic("data storage").With(zap.Int("me", me)),
 	}
 }
 
@@ -62,7 +62,7 @@ func (st *DataStorage) ApplyCommand(index int, command *Op) (string, Err) {
 	}
 
 	logger.Info("command applied", zap.String("value", st.data[command.Key]))
-	st.LogStatusOfStorage(logger)
+	// st.LogStatusOfStorage(logger)
 
 	val, ok := st.data[command.Key]
 	if !ok {

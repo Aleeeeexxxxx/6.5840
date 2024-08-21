@@ -8,15 +8,16 @@ import (
 )
 
 func GetBaseLogger() (*zap.Logger, error) {
-	if os.Getenv("MR_PROD") == "true" {
-		cfg := zap.NewProductionConfig()
-		cfg.Level = zap.NewAtomicLevelAt(zap.ErrorLevel)
-		return cfg.Build()
+	cfg := zap.NewDevelopmentConfig()
+
+	if os.Getenv("RAFT_PROD") == "true" {
+		cfg.Level = zap.NewAtomicLevelAt(zap.FatalLevel)
 	} else {
-		cfg := zap.NewDevelopmentConfig()
-		cfg.EncoderConfig.StacktraceKey = ""
-		return cfg.Build()
+		cfg.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+		cfg.DisableStacktrace = true
 	}
+
+	return cfg.Build()
 }
 
 func GetLogger(component string) (*zap.Logger, error) {
@@ -33,6 +34,18 @@ func GetLoggerOrPanic(component string) *zap.Logger {
 		panic(err)
 	}
 	return logger
+}
+
+func GetKVServerLoggerOrPanic(component string) *zap.Logger {
+	return GetLoggerOrPanic("kvserver-" + component)
+}
+
+func GetKVClientLoggerOrPanic(component string) *zap.Logger {
+	return GetLoggerOrPanic("kvclient-" + component)
+}
+
+func GetTestLoggerOrPanic(component string) *zap.Logger {
+	return GetLoggerOrPanic("test-" + component)
 }
 
 const LoggerComponent = "component"

@@ -27,7 +27,7 @@ type RequestMngr struct {
 func NewRequestMngr(me int) *RequestMngr {
 	return &RequestMngr{
 		requests: make(map[int32]*Request),
-		logger:   GetLoggerOrPanic("storage").With(zap.Int("me", me)),
+		logger:   GetKVServerLoggerOrPanic("storage").With(zap.Int("me", me)),
 	}
 }
 

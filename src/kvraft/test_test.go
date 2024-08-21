@@ -15,7 +15,7 @@ import (
 	"6.5840/porcupine"
 )
 
-var logger = GetLoggerOrPanic("test")
+var logger = GetTestLoggerOrPanic("test")
 
 // The tester generously allows solutions to complete elections in one second
 // (much more than the paper's range of timeouts).

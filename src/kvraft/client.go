@@ -40,7 +40,7 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	ck.servers = servers
 	ck.id = atomic.AddInt32(&globalClerkInstanceID, 1)
 	ck.leaderID = int(nrand()) % len(servers)
-	ck.logger = GetLoggerOrPanic("client").With(zap.Int32(LogClerkID, ck.id))
+	ck.logger = GetKVClientLoggerOrPanic("client").With(zap.Int32(LogClerkID, ck.id))
 	ck.currentMessageID = 0
 	ck.realLeaderIDs = realLeaderIDs
 
@@ -133,6 +133,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 func (ck *Clerk) Put(key string, value string) {
 	ck.PutAppend(key, value, "Put")
 }
+
 func (ck *Clerk) Append(key string, value string) {
 	ck.PutAppend(key, value, "Append")
 }

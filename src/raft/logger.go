@@ -2,8 +2,9 @@ package raft
 
 import (
 	"fmt"
-	"go.uber.org/zap"
 	"os"
+
+	"go.uber.org/zap"
 )
 
 func GetBaseLogger() (*zap.Logger, error) {
@@ -28,7 +29,7 @@ func GetLogger(component string) (*zap.Logger, error) {
 }
 
 func GetLoggerOrPanic(component string) *zap.Logger {
-	logger, err := GetLogger(component)
+	logger, err := GetLogger("raft-" + component)
 	if err != nil {
 		panic(err)
 	}

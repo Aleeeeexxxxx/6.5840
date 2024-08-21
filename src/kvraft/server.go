@@ -44,7 +44,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
-	kv.logger = GetLoggerOrPanic("kv server").With(zap.Int("me", me))
+	kv.logger = GetKVServerLoggerOrPanic("kv server").With(zap.Int("me", me))
 
 	kv.clients = NewClerkStorage(me)
 	kv.requests = NewRequestMngr(me)
@@ -144,6 +144,13 @@ func (kv *KVServer) listenCommand(index int, op Op) {
 		With(zap.Int64(LogMessageID, op.Metadata.MessageID)).
 		With(zap.Int(LogCMDIndex, index))
 	logger.Info("handle raft command msg")
+
+	// prevent duplicate requests
+	if val, ok := kv.clients.GetOpValue(op.Metadata); ok {
+		logger.Info("msg id is older than current, reply from client storage, skip updating")
+		kv.requests.Complete(op.Metadata, val, OK)
+		return
+	}
 
 	// update data storage first, then clerk storage
 	value, err := kv.storage.ApplyCommand(index, &op)
