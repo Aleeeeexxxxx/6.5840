@@ -1,4 +1,4 @@
-package raft
+package kvraft
 
 import (
 	"fmt"
@@ -29,23 +29,32 @@ func GetLogger(component string) (*zap.Logger, error) {
 }
 
 func GetLoggerOrPanic(component string) *zap.Logger {
-	logger, err := GetLogger("raft-" + component)
+	logger, err := GetLogger(component)
 	if err != nil {
 		panic(err)
 	}
 	return logger
 }
 
-const (
-	LoggerComponent = "component"
-	Term            = "term"
-	Peer            = "peer"
-	Index           = "me"
-	PeerTerm        = "peer term"
-)
+func GetKVServerLoggerOrPanic(component string) *zap.Logger {
+	return GetLoggerOrPanic("kvserver-" + component)
+}
+
+func GetKVClientLoggerOrPanic(component string) *zap.Logger {
+	return GetLoggerOrPanic("kvclient-" + component)
+}
+
+func GetTestLoggerOrPanic(component string) *zap.Logger {
+	return GetLoggerOrPanic("test-" + component)
+}
+
+const LoggerComponent = "component"
 
 const (
-	followerTimeout       = "follower timeout"
-	candidateTimeout      = "candidate timeout"
-	candidateBecomeLeader = "candidate become leader"
+	LogClerkID   = "clerk"
+	LogMessageID = "msgID"
+	LogCMDIndex  = "cmdIndex"
+	LogKey       = "key"
+	LogValue     = "value"
+	LogLeaderID  = "leaderID"
 )

@@ -18,13 +18,14 @@ package raft
 //
 
 import (
-	"6.5840/labgob"
 	"bytes"
 	"fmt"
 	"math/rand"
 	"reflect"
 	"sync"
 	"time"
+
+	"6.5840/labgob"
 
 	//	"6.5840/labgob"
 	"6.5840/labrpc"
@@ -134,7 +135,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		getStateCh:        make(chan *StateTask),
 		storeNewCommandCh: make(chan *StoreNewCommandTask),
 		notifyCh:          make(chan struct{}),
-		commitTicker:      time.NewTicker(200 * time.Millisecond),
+		commitTicker:      time.NewTicker(20 * time.Millisecond),
 		buildSnapshotCh:   make(chan *BuildSnapshotTask),
 
 		applyMsgCh:  applyCh,

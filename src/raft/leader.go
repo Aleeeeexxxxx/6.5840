@@ -182,7 +182,7 @@ func NewReplicator(
 			With(zap.Int(Term, worker.state.GetCurrentTerm())).
 			With(zap.Int(Index, worker.me)),
 		stopCh:     stopCh,
-		timeout:    worker.heartBeatInterval,
+		timeout:    worker.heartBeatInterval / 5,
 		replicated: EmptyLogIndex,
 	}
 }

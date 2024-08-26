@@ -35,7 +35,7 @@ class RoleLogEntry:
 
 
 def createEntry(msg: str):
-    if not msg.startswith("2024-02-"):
+    if not msg.startswith("2024-08-"):
         return DebugLogEntry(msg), -1
 
     try:
