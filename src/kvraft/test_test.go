@@ -320,9 +320,8 @@ func GenericTest(t *testing.T, part string, nclients int, nservers int, unreliab
 					}
 				}
 			}
-			logger.Info("clerk finish running")
+			logger.Info(fmt.Sprintf("clerk finish running, cli=%d, clerkid=%d", cli, myck.id))
 		})
-
 		if partitions {
 			// Allow the clients to perform some operations without interruption
 			time.Sleep(1 * time.Second)

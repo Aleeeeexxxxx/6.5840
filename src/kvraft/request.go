@@ -27,7 +27,7 @@ type RequestMngr struct {
 func NewRequestMngr(me int) *RequestMngr {
 	return &RequestMngr{
 		requests: make(map[int32]*Request),
-		logger:   GetKVServerLoggerOrPanic("storage").With(zap.Int("me", me)),
+		logger:   GetKVServerLoggerOrPanic("RequestMngr").With(zap.Int("me", me)),
 	}
 }
 
@@ -92,7 +92,7 @@ func (rm *RequestMngr) inQueue(req *Request) {
 	if ok {
 		logger.Warn(
 			"discard old one for duplicated request",
-			zap.Int64("msgID", old.Metadata.MessageID),
+			zap.Int64(LogMessageID, old.Metadata.MessageID),
 		)
 		old.Err = ErrDuplicateReq
 		old.ch <- struct{}{}
@@ -117,14 +117,28 @@ func (rm *RequestMngr) Complete(metadata Metadata, value string, err Err) {
 		return
 	}
 
+	logger.Debug(
+		"compare with current metadata of req",
+		zap.Int32(LogClerkID, req.Metadata.ClerkID),
+		zap.Int64(LogMessageID, req.Metadata.MessageID),
+	)
+
+	if req.Metadata.MessageID > metadata.MessageID {
+		logger.Debug("outdated message, discard op")
+		return
+	} else if req.Metadata.MessageID < metadata.MessageID {
+		logger.Error("msgID is bigger than the request, req should be replied before")
+	}
+
 	req.Value = value
 	req.Err = err
 	req.ch <- struct{}{}
 
 	delete(rm.requests, key)
 	logger.Info(
-		"reply the request",
+		"message matched, reply the request",
 		zap.String("value", value),
+		zap.String("err", string(err)),
 	)
 }
 
