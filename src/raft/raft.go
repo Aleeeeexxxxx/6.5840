@@ -145,7 +145,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	worker.role = NewFollower(worker)
 
 	// initialize from state persisted before a crash
-	worker.readPersist(persistent.ReadRaftState())
+	worker.readPersist(persistent.ReadRaftState(), persistent.ReadSnapshot())
 
 	go worker.daemon()
 	return worker
@@ -186,7 +186,7 @@ func (rf *Raft) persist() {
 
 	state := w.Bytes()
 	if rf.state.logMngr.Snapshot != nil {
-		rf.persister.Save(state, rf.state.logMngr.Snapshot.Data)
+		rf.persister.Save(state, rf.state.logMngr.Snapshot.Serialize())
 	} else {
 		rf.persister.Save(state, nil)
 	}
@@ -194,7 +194,7 @@ func (rf *Raft) persist() {
 }
 
 // restore previously persisted state.
-func (rf *Raft) readPersist(data []byte) {
+func (rf *Raft) readPersist(data []byte, snapshot []byte) {
 	if data == nil || len(data) < 1 { // bootstrap without any state?
 		return
 	}
@@ -211,6 +211,7 @@ func (rf *Raft) readPersist(data []byte) {
 	}
 
 	rf.state.Recover(recoverOrPanic)
+	rf.state.logMngr.Snapshot = DeserializeSnapshotFromBuf(snapshot)
 }
 
 // the service says it has created a snapshot that has

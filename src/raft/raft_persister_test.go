@@ -12,6 +12,6 @@ func TestRaft_Persist(t *testing.T) {
 	rq := require.New(t)
 
 	rf.persist()
-	rf.readPersist(p.ReadRaftState())
+	rf.readPersist(p.ReadRaftState(), nil)
 	rq.Nil(rf.state.logMngr.Snapshot)
 }
