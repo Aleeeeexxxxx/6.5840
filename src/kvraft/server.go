@@ -141,11 +141,12 @@ func (kv *KVServer) listen() {
 			kv.listenCommand(msg.CommandIndex, msg.Command.(Op))
 
 			if kv.maxraftstate > 0 && kv.persister.RaftStateSize() > kv.maxraftstate {
+				index, snapshot := kv.buildSnapshot()
 				kv.logger.Info(
 					"RaftStateSize exceed the limit, build snapshot",
 					zap.Int("RaftStateSize", kv.persister.RaftStateSize()),
+					zap.Int("index", index),
 				)
-				index, snapshot := kv.buildSnapshot()
 				go func() { kv.rf.Snapshot(index, snapshot) }()
 			}
 		}
