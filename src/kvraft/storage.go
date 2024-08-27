@@ -89,6 +89,30 @@ func (cm *ClerkStorage) AppendNewOp(op *Op) {
 	logger.Info("new op appended")
 }
 
+func (cm *ClerkStorage) Serialize() []byte {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	data, _ := json.Marshal(cm.data)
+	return data
+}
+
+func (cm *ClerkStorage) Deserialize(p []byte) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+
+	json.Unmarshal(p, &cm.data)
+}
+
+func (cm *ClerkStorage) ForEach(f func(id int32, c *Client)) {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+
+	for id, c := range cm.data {
+		f(id, c)
+	}
+}
+
 type DataStorage struct {
 	mutex            sync.Mutex
 	data             map[string]string
@@ -172,4 +196,30 @@ func (st *DataStorage) LogStatusOfStorage(logger *zap.Logger) {
 		zap.String("data", string(data)),
 		zap.Int("last applied index", st.lastAppliedIndex),
 	)
+}
+
+func (st *DataStorage) Serialize() ([]byte, int) {
+	st.mutex.Lock()
+	defer st.mutex.Unlock()
+
+	st.logger.Debug(
+		"serialize data storage",
+		zap.Int("last applied index", st.lastAppliedIndex),
+	)
+
+	data, _ := json.Marshal(st.data)
+	return data, st.lastAppliedIndex
+}
+
+func (st *DataStorage) Deserialize(index int, p []byte) {
+	st.mutex.Lock()
+	defer st.mutex.Unlock()
+
+	st.logger.Debug(
+		"serialize data storage",
+		zap.Int("last applied index", index),
+	)
+
+	json.Unmarshal(p, &st.data)
+	st.lastAppliedIndex = index
 }

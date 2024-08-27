@@ -143,7 +143,7 @@ func (rm *RequestMngr) Complete(metadata Metadata, value string, err Err) {
 }
 
 func (rm *RequestMngr) Release() {
-	rm.logger.Info("waiting for all inflight requests inqueue")
+	rm.logger.Debug("waiting for all inflight requests inqueue")
 	rm.queueing.Wait()
 
 	rm.logger.Info("release all requests")
