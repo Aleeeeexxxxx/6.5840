@@ -10,9 +10,12 @@ func TestLogSvc(t *testing.T) {
 	// ls := NewLogService(0)
 }
 
-func TestLogStorage_Snapshot(t *testing.T) {
+func TestLogStorage_SaveSnapshot(t *testing.T) {
 	rq := require.New(t)
 
+	/*
+	 * Snapshot only
+	 */
 	t.Run("no snapshot, should save", func(t *testing.T) {
 		st := new(Storage)
 
@@ -66,6 +69,9 @@ func TestLogStorage_Snapshot(t *testing.T) {
 		rq.Equal(string(st.Snapshot.Data), "overwrite")
 	})
 
+	/*
+	 * Logs only
+	 */
 	t.Run("log index smaller than snapshot, trim all", func(t *testing.T) {
 		st := new(Storage)
 		st.Logs = Logs{
@@ -129,6 +135,9 @@ func TestLogStorage_Snapshot(t *testing.T) {
 		rq.Equal(1, len(st.Logs))
 	})
 
+	/*
+	 * Logs and Snapshot
+	 */
 	t.Run("log index bigger than snapshot, trim logs and discard old snapshot", func(t *testing.T) {
 		st := new(Storage)
 		st.Logs = Logs{
