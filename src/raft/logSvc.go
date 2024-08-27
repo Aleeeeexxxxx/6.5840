@@ -213,7 +213,7 @@ func (st *Storage) SaveSnapshot(snapshot *Snapshot) error {
 	if st.Snapshot != nil && st.Snapshot.include(snapshot.LastLogIndex) {
 		return errorSnapshotExists
 	}
-	if len(st.Logs) == 0 {
+	if len(st.Logs) != 0 {
 		st.Logs.removeEntriesBeforeIndex(snapshot.LastLogIndex + 1)
 	}
 	st.Snapshot = snapshot
