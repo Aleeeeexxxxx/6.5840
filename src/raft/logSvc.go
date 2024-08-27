@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -113,20 +114,30 @@ func (ls *LogService) BuildSnapshot(term int, index int, data []byte) error {
 			return errorSnapshotExists
 		}
 	}
-	return ls.SaveSnapshot(&Snapshot{
+	old := len(ls.Storage.Logs)
+	err = ls.SaveSnapshot(&Snapshot{
 		BuildTerm:    term,
 		LastLogIndex: index,
 		LastLogTerm:  term,
 		Data:         data,
 	})
+
+	cur := len(ls.Storage.Logs)
+	ls.logger.Debug(
+		fmt.Sprintf("snapshot built, logs removed: %d", old-cur),
+		zap.Int("old", old),
+		zap.Int("cur", cur),
+	)
+
+	return err
 }
 
 func (ls *LogService) Encode(encoder func(val interface{})) {
-	encoder(ls.Storage)
+	encoder(ls.Storage.Logs)
 }
 
 func (ls *LogService) Recover(decoder func(p interface{})) {
-	decoder(&ls.Storage)
+	decoder(&ls.Storage.Logs)
 }
 
 type Storage struct {
@@ -267,8 +278,23 @@ type Snapshot struct {
 	Data         []byte
 }
 
+func DeserializeSnapshotFromBuf(buf []byte) *Snapshot {
+	if len(buf) == 0 {
+		return nil
+	}
+
+	var snapshot Snapshot
+	_ = json.Unmarshal(buf, &snapshot)
+	return &snapshot
+}
+
 func (sp *Snapshot) include(index int) bool {
 	return sp.LastLogIndex >= index
+}
+
+func (sp *Snapshot) Serialize() []byte {
+	data, _ := json.Marshal(sp)
+	return data
 }
 
 var (
