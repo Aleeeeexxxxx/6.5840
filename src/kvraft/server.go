@@ -1,6 +1,9 @@
 package kvraft
 
 import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
 	"sync/atomic"
 
 	"6.5840/labgob"
@@ -28,8 +31,9 @@ type KVServer struct {
 	dead     int32 // set by Kill()
 	requests *RequestMngr
 
-	clients *ClerkStorage
-	storage *DataStorage
+	clients   *ClerkStorage
+	storage   *DataStorage
+	persister *raft.Persister
 }
 
 func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister, maxraftstate int) *KVServer {
@@ -40,6 +44,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv := new(KVServer)
 	kv.me = me
 	kv.maxraftstate = maxraftstate
+	kv.persister = persister
 
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
@@ -134,6 +139,20 @@ func (kv *KVServer) listen() {
 	for msg := range kv.applyCh {
 		if msg.CommandValid {
 			kv.listenCommand(msg.CommandIndex, msg.Command.(Op))
+
+			if kv.maxraftstate > 0 && kv.persister.RaftStateSize() > kv.maxraftstate {
+				index, snapshot := kv.buildSnapshot()
+				kv.logger.Info(
+					"RaftStateSize exceed the limit, build snapshot",
+					zap.Int("RaftStateSize", kv.persister.RaftStateSize()),
+					zap.Int("index", index),
+				)
+				go func() { kv.rf.Snapshot(index, snapshot) }()
+			}
+		}
+		if msg.SnapshotValid {
+			kv.installSnapshot(msg.SnapshotIndex, msg.Snapshot)
+			kv.handleRequests()
 		}
 	}
 }
@@ -158,4 +177,50 @@ func (kv *KVServer) listenCommand(index int, op Op) {
 
 	kv.clients.AppendNewOp(&op)
 	kv.requests.Complete(op.Metadata, value, err)
+}
+
+func (kv *KVServer) buildSnapshot() (int, []byte) {
+	data, index := kv.storage.Serialize()
+	clients := kv.clients.Serialize()
+
+	buf := make([]byte, len(data)+len(clients)+2*4)
+
+	binary.BigEndian.PutUint32(buf[:4], uint32(len(clients)))
+	binary.BigEndian.PutUint32(buf[4:8], uint32(len(data)))
+
+	copy(buf[8:], clients)
+	copy(buf[8+len(clients):], data)
+
+	return index, buf
+}
+
+func (kv *KVServer) installSnapshot(index int, data []byte) {
+	kv.logger.Info(fmt.Sprintf("install snapshot, index=%d", index))
+
+	reader := bytes.NewReader(data)
+
+	var clientsLen, dataLen uint32
+	binary.Read(reader, binary.BigEndian, &clientsLen)
+	binary.Read(reader, binary.BigEndian, &dataLen)
+
+	buf := make([]byte, max(clientsLen, dataLen))
+
+	reader.Read(buf[:clientsLen])
+	kv.clients.Deserialize(buf[:clientsLen])
+
+	reader.Read(buf[:dataLen])
+	kv.storage.Deserialize(index, buf[:dataLen])
+}
+
+func (kv *KVServer) handleRequests() {
+	kv.clients.ForEach(func(id int32, c *Client) {
+		kv.requests.Complete(Metadata{ClerkID: id, MessageID: c.MessageID}, c.Value, OK)
+	})
+}
+
+func max(a, b uint32) uint32 {
+	if a > b {
+		return a
+	}
+	return b
 }
