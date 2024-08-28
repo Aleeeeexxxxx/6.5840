@@ -9,8 +9,8 @@ import (
 )
 
 type Client struct {
-	messageID int64
-	value     string
+	MessageID int64
+	Value     string
 }
 
 type ClerkStorage struct {
@@ -39,17 +39,17 @@ func (cm *ClerkStorage) GetOpValue(metadata Metadata) (string, bool) {
 	key := metadata.ClerkID
 	c, ok := cm.data[key]
 	if ok {
-		LastCommittedMsgID := c.messageID
+		LastCommittedMsgID := c.MessageID
 		logger = logger.With(zap.Int64("LastCommittedMsgID", LastCommittedMsgID))
 
 		if metadata.MessageID == LastCommittedMsgID {
 			logger.Info("msgID equals to committed")
-			return c.value, true
+			return c.Value, true
 		} else if metadata.MessageID < LastCommittedMsgID {
 			logger.Info("msgID smaller than committed")
 			// reply the value is safe
 			// because the request should be discard now
-			return c.value, true
+			return c.Value, true
 		} else {
 			logger.Info("msgID bigger than committed")
 		}
@@ -72,10 +72,10 @@ func (cm *ClerkStorage) AppendNewOp(op *Op) {
 	key := op.Metadata.ClerkID
 	c, ok := cm.data[key]
 	if ok {
-		if c.messageID >= op.Metadata.MessageID {
+		if c.MessageID >= op.Metadata.MessageID {
 			logger.Info(
 				"op message id is smaller than current, skip append",
-				zap.Int64(LogMessageID, c.messageID),
+				zap.Int64(LogMessageID, c.MessageID),
 			)
 			return
 		}
@@ -84,8 +84,8 @@ func (cm *ClerkStorage) AppendNewOp(op *Op) {
 		cm.data[op.Metadata.ClerkID] = c
 	}
 
-	c.messageID = op.Metadata.MessageID
-	c.value = op.Value
+	c.MessageID = op.Metadata.MessageID
+	c.Value = op.Value
 	logger.Info("new op appended")
 }
 

@@ -214,7 +214,7 @@ func (kv *KVServer) installSnapshot(index int, data []byte) {
 
 func (kv *KVServer) handleRequests() {
 	kv.clients.ForEach(func(id int32, c *Client) {
-		kv.requests.Complete(Metadata{ClerkID: id, MessageID: c.messageID}, c.value, OK)
+		kv.requests.Complete(Metadata{ClerkID: id, MessageID: c.MessageID}, c.Value, OK)
 	})
 }
 
