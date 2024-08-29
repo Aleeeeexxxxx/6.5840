@@ -218,19 +218,30 @@ func (rf *Raft) readPersist(data []byte, snapshot []byte) {
 // all info up to and including index. this means the
 // service no longer needs the log through (and including)
 // that index. Raft should now trim its log as much as possible.
-func (rf *Raft) Snapshot(index int, snapshot []byte) {
+func (rf *Raft) Snapshot(index int, snapshot []byte) *BuildSnapshotTask {
+	task := &BuildSnapshotTask{index: index, data: snapshot}
+	task.wg.Add(1)
 	go func() {
-		task := &BuildSnapshotTask{index: index, data: snapshot}
-		rf.buildSnapshotCh <- task
+		select {
+		case <-rf.stopCh:
+			task.wg.Done()
+		case rf.buildSnapshotCh <- task:
+			rf.logger.Debug("put snapshot task, sync")
+		}
 	}()
+
+	return task
 }
 
 type BuildSnapshotTask struct {
 	index int
 	data  []byte
+	wg    sync.WaitGroup
 }
 
 func (rf *Raft) handleBuildSnapshotTask(task *BuildSnapshotTask) {
+	defer task.wg.Done()
+
 	if err := rf.state.logMngr.BuildSnapshot(
 		rf.state.GetCurrentTerm(), task.index, task.data); err != nil {
 		if err == errorSnapshotExists {
