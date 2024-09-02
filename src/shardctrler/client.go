@@ -24,6 +24,10 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 func (ck *Clerk) Query(num int) Config {
 	val := ck.kvclerk.Get(fmt.Sprintf("%d", num))
 
+	if len(val) == 0 {
+		return *GetDefaultConfig()
+	}
+
 	var cfg Config
 	MustJsonUnmarshal(val, &cfg)
 

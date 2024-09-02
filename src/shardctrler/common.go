@@ -62,7 +62,7 @@ type MoveArgs struct {
 
 func MustJsonUnmarshal(raw string, v interface{}) {
 	if err := json.Unmarshal([]byte(raw), v); err != nil {
-		panic(err)
+		panic(fmt.Errorf("failed to unmarshal [%s]: %w", raw, err))
 	}
 }
 

@@ -42,7 +42,7 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister)
 	sc.kvServer = kvraft.MakeKvServer(servers, me, persister, 3000, sc.rewriteOp)
 	sc.rf = sc.kvServer.Raft()
 	sc.logger = GetShardCtrlerLoggerOrPanic("server")
-	sc.cfg = sc.defaultConfig()
+	sc.cfg = GetDefaultConfig()
 
 	return sc
 }
@@ -80,7 +80,7 @@ func (sc *ShardCtrler) rewriteSnapshotOp(st *kvraft.DataStorage) *kvraft.Op {
 			cfgJsonString = v
 		}
 	})
-	
+
 	MustJsonUnmarshal(cfgJsonString, sc.cfg)
 	return nil
 }
@@ -147,15 +147,15 @@ func (sc *ShardCtrler) handleKVRaftOp(op *kvraft.Op) {
 	)
 }
 
-func (sc *ShardCtrler) defaultConfig() *Config {
-	cfg := &Config{
+func GetDefaultConfig() *Config {
+	defaultCfg := &Config{
 		Num:    0,
 		Shards: [NShards]int{},
 		Groups: map[int][]string{},
 	}
 
 	for i := 0; i < NShards; i++ {
-		cfg.Shards[i] = unassign
+		defaultCfg.Shards[i] = unassign
 	}
-	return cfg
+	return defaultCfg
 }

@@ -30,10 +30,9 @@ func ConfigShardsEqualOneOf(t *testing.T, cfg *Config, expected [][]int) {
 
 func TestCfgMngr_Balance(t *testing.T) {
 	rq := require.New(t)
-	sc := &ShardCtrler{}
 
 	t.Run("empty", func(t *testing.T) {
-		cfg := sc.defaultConfig()
+		cfg := GetDefaultConfig()
 
 		cb := NewConfigBalancer(cfg)
 		cb.Balance()
@@ -46,7 +45,7 @@ func TestCfgMngr_Balance(t *testing.T) {
 	})
 
 	t.Run("one group, should assign all shards to this group", func(t *testing.T) {
-		cfg := sc.defaultConfig()
+		cfg := GetDefaultConfig()
 		cfg.Groups[1] = []string{"a"}
 
 		cb := NewConfigBalancer(cfg)
@@ -60,7 +59,7 @@ func TestCfgMngr_Balance(t *testing.T) {
 	})
 
 	t.Run("several groups, mock 1 join", func(t *testing.T) {
-		cfg := sc.defaultConfig()
+		cfg := GetDefaultConfig()
 		cfg.Groups[1] = []string{"a"}
 		cfg.Groups[2] = []string{"a, b, c"}
 		cfg.Shards = [10]int{1, 1, 1, 1, 1, 2, 2, 2, 2, 2}
@@ -79,7 +78,7 @@ func TestCfgMngr_Balance(t *testing.T) {
 	})
 
 	t.Run("several groups, mock 1 leave", func(t *testing.T) {
-		cfg := sc.defaultConfig()
+		cfg := GetDefaultConfig()
 		cfg.Groups[1] = []string{"a"}
 		cfg.Groups[2] = []string{"a, b, c"}
 		cfg.Shards = [10]int{1, 1, 1, 1, 1, 2, 2, 2, unassign, unassign}
@@ -95,7 +94,7 @@ func TestCfgMngr_Balance(t *testing.T) {
 	})
 
 	t.Run("former 1 not assigned, has position now", func(t *testing.T) {
-		cfg := sc.defaultConfig()
+		cfg := GetDefaultConfig()
 		cfg.Groups[1] = []string{"a"}
 		cfg.Groups[2] = []string{"a, b, c"}
 		cfg.Groups[3] = []string{"a"}
@@ -119,7 +118,7 @@ func TestCfgMngr_Balance(t *testing.T) {
 	})
 
 	t.Run("former 1 not assigned, no position now", func(t *testing.T) {
-		cfg := sc.defaultConfig()
+		cfg := GetDefaultConfig()
 		cfg.Groups[1] = []string{"a"}
 		cfg.Groups[2] = []string{"a, b, c"}
 		cfg.Groups[3] = []string{"a"}
