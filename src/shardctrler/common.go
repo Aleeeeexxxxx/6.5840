@@ -25,6 +25,8 @@ import (
 // The number of shards.
 const NShards = 10
 
+const unassign = 0
+
 // A configuration -- an assignment of shards to groups.
 // Please don't change this.
 type Config struct {
