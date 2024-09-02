@@ -1,5 +1,10 @@
 package shardctrler
 
+import (
+	"encoding/json"
+	"fmt"
+)
+
 //
 // Shard controler: assigns shards to replication groups.
 //
@@ -28,28 +33,24 @@ type Config struct {
 	Groups map[int][]string // gid -> servers[]
 }
 
-const (
-	OK = "OK"
-)
+func (cfg Config) NumString() string {
+	return fmt.Sprintf("%d", cfg.Num)
+}
 
-type Err string
+const QueryLatestConfigNum = "-1"
+
+const (
+	OpMove  = "move"
+	OpJoin  = "join"
+	OpLeave = "leave"
+)
 
 type JoinArgs struct {
 	Servers map[int][]string // new GID -> servers mappings
 }
 
-type JoinReply struct {
-	WrongLeader bool
-	Err         Err
-}
-
 type LeaveArgs struct {
 	GIDs []int
-}
-
-type LeaveReply struct {
-	WrongLeader bool
-	Err         Err
 }
 
 type MoveArgs struct {
@@ -57,17 +58,16 @@ type MoveArgs struct {
 	GID   int
 }
 
-type MoveReply struct {
-	WrongLeader bool
-	Err         Err
+func MustJsonUnmarshal(raw string, v interface{}) {
+	if err := json.Unmarshal([]byte(raw), v); err != nil {
+		panic(err)
+	}
 }
 
-type QueryArgs struct {
-	Num int // desired config number
-}
-
-type QueryReply struct {
-	WrongLeader bool
-	Err         Err
-	Config      Config
+func JsonStringfyOrPanic(v interface{}) string {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return string(raw)
 }

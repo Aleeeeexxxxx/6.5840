@@ -114,18 +114,19 @@ func (cm *ClerkStorage) ForEach(f func(id int32, c *Client)) {
 }
 
 type DataStorage struct {
-	mutex            sync.Mutex
-	data             map[string]string
-	lastAppliedIndex int
-
-	logger *zap.Logger
+	mutex                sync.Mutex
+	data                 map[string]string
+	lastAppliedIndex     int
+	afterAccessCheckHook func(*Op) *Op
+	logger               *zap.Logger
 }
 
-func NewDataStorage(me int) *DataStorage {
+func NewDataStorage(me int, hook func(*Op) *Op) *DataStorage {
 	return &DataStorage{
-		data:             make(map[string]string),
-		lastAppliedIndex: -1,
-		logger:           GetKVServerLoggerOrPanic("data storage").With(zap.Int("me", me)),
+		data:                 make(map[string]string),
+		lastAppliedIndex:     -1,
+		logger:               GetKVServerLoggerOrPanic("data storage").With(zap.Int("me", me)),
+		afterAccessCheckHook: hook,
 	}
 }
 
@@ -154,6 +155,10 @@ func (st *DataStorage) ApplyCommand(index int, command *Op) (string, Err) {
 	}
 
 	st.lastAppliedIndex = index
+
+	if st.afterAccessCheckHook != nil {
+		command = st.afterAccessCheckHook(command)
+	}
 
 	if command.Op == "Put" {
 		switch command.SubOp {

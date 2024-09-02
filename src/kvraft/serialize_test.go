@@ -8,7 +8,7 @@ import (
 
 func TestDataStorage_Serialize(t *testing.T) {
 	rq := require.New(t)
-	data := NewDataStorage(0)
+	data := NewDataStorage(0, nil)
 
 	expectedData := map[string]string{
 		"key1": "value1",
