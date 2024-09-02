@@ -2,6 +2,7 @@ package shardctrler
 
 import (
 	"fmt"
+	"strconv"
 
 	"6.5840/kvraft"
 	"6.5840/labrpc"
@@ -46,7 +47,7 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister)
 	return sc
 }
 
-func (sc *ShardCtrler) rewriteOp(op *kvraft.Op) *kvraft.Op {
+func (sc *ShardCtrler) rewriteCommandOp(op *kvraft.Op) *kvraft.Op {
 	if op.Op == "Get" {
 		if op.Key == QueryLatestConfigNum {
 			op.Key = sc.cfg.NumString()
@@ -66,6 +67,29 @@ func (sc *ShardCtrler) rewriteOp(op *kvraft.Op) *kvraft.Op {
 	op.Key = sc.cfg.NumString()
 	op.Value = JsonStringfyOrPanic(sc.cfg)
 	return op
+}
+
+func (sc *ShardCtrler) rewriteSnapshotOp(st *kvraft.DataStorage) *kvraft.Op {
+	max := 0
+	var cfgJsonString string
+
+	st.Map(func(k, v string) {
+		num, _ := strconv.Atoi(k)
+		if max < num {
+			max = num
+			cfgJsonString = v
+		}
+	})
+	
+	MustJsonUnmarshal(cfgJsonString, sc.cfg)
+	return nil
+}
+
+func (sc *ShardCtrler) rewriteOp(op *kvraft.Op, st *kvraft.DataStorage) *kvraft.Op {
+	if op != nil {
+		return sc.rewriteCommandOp(op)
+	}
+	return sc.rewriteSnapshotOp(st)
 }
 
 func (sc *ShardCtrler) handleKVRaftOp(op *kvraft.Op) {

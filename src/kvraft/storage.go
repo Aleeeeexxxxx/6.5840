@@ -113,15 +113,16 @@ func (cm *ClerkStorage) ForEach(f func(id int32, c *Client)) {
 	}
 }
 
+type Hook func(*Op, *DataStorage) *Op
 type DataStorage struct {
 	mutex                sync.Mutex
 	data                 map[string]string
 	lastAppliedIndex     int
-	afterAccessCheckHook func(*Op) *Op
+	afterAccessCheckHook Hook
 	logger               *zap.Logger
 }
 
-func NewDataStorage(me int, hook func(*Op) *Op) *DataStorage {
+func NewDataStorage(me int, hook Hook) *DataStorage {
 	return &DataStorage{
 		data:                 make(map[string]string),
 		lastAppliedIndex:     -1,
@@ -157,7 +158,7 @@ func (st *DataStorage) ApplyCommand(index int, command *Op) (string, Err) {
 	st.lastAppliedIndex = index
 
 	if st.afterAccessCheckHook != nil {
-		command = st.afterAccessCheckHook(command)
+		command = st.afterAccessCheckHook(command, st)
 	}
 
 	if command.Op == "Put" {
@@ -216,6 +217,15 @@ func (st *DataStorage) Serialize() ([]byte, int) {
 	return data, st.lastAppliedIndex
 }
 
+func (st *DataStorage) Map(f func(string, string)) {
+	st.mutex.Lock()
+	defer st.mutex.Unlock()
+
+	for k, v := range st.data {
+		f(k, v)
+	}
+}
+
 func (st *DataStorage) Deserialize(index int, p []byte) {
 	st.mutex.Lock()
 	defer st.mutex.Unlock()
@@ -227,4 +237,8 @@ func (st *DataStorage) Deserialize(index int, p []byte) {
 
 	json.Unmarshal(p, &st.data)
 	st.lastAppliedIndex = index
+
+	if st.afterAccessCheckHook != nil {
+		st.afterAccessCheckHook(nil, st)
+	}
 }

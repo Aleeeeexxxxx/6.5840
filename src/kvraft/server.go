@@ -36,7 +36,7 @@ type KVServer struct {
 	persister *raft.Persister
 }
 
-func MakeKvServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister, maxraftstate int, hook func(op *Op) *Op) *KVServer {
+func MakeKvServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister, maxraftstate int, hook Hook) *KVServer {
 	labgob.Register(Op{})
 
 	kv := new(KVServer)
