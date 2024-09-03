@@ -1,5 +1,7 @@
 package shardctrler
 
+import "sort"
+
 type ConfigBalancer struct {
 	cfg *Config
 
@@ -29,23 +31,53 @@ func (cb *ConfigBalancer) parseAssignments() {
 	}
 }
 
+func (cb *ConfigBalancer) max() ([]int, int) {
+	max := -1
+	var maxGids []int
+
+	for gid, shards := range cb.assignments {
+		if len(shards) > max {
+			max = len(shards)
+			maxGids = []int{gid}
+		} else if len(shards) == max {
+			maxGids = append(maxGids, gid)
+		}
+	}
+
+	sort.Slice(maxGids, func(i, j int) bool {
+		return maxGids[i] < maxGids[j]
+	})
+
+	return maxGids, max
+}
+
+func (cb *ConfigBalancer) min() ([]int, int) {
+	min := -1
+	var minGids []int
+
+	for gid, shards := range cb.assignments {
+		if min == -1 || len(shards) < min {
+			min = len(shards)
+			minGids = []int{gid}
+		} else if len(shards) == min {
+			minGids = append(minGids, gid)
+		}
+	}
+
+	sort.Slice(minGids, func(i, j int) bool {
+		return minGids[i] < minGids[j]
+	})
+
+	return minGids, min
+}
+
 func (cb *ConfigBalancer) assignUnassigned() {
 	if len(cb.assignments) == 0 {
 		return
 	}
 
 	for len(cb.unassigned) > 0 {
-		min := -1
-		minGids := []int{}
-
-		for gid, shards := range cb.assignments {
-			if min == -1 || len(shards) < min {
-				min = len(shards)
-				minGids = []int{gid}
-			} else if len(shards) == min {
-				minGids = append(minGids, gid)
-			}
-		}
+		minGids, _ := cb.min()
 
 		for _, gid := range minGids {
 			if len(cb.unassigned) == 0 {
@@ -67,29 +99,24 @@ func (cb *ConfigBalancer) rebalanceAssignments() {
 	}
 
 	for {
-		var maxGid, minGid int
-		max := -1
-		min := -1
-
-		for gid, shards := range cb.assignments {
-			if len(shards) > max {
-				max = len(shards)
-				maxGid = gid
-			}
-			if min == -1 || len(shards) < min {
-				min = len(shards)
-				minGid = gid
-			}
-		}
+		maxGids, max := cb.max()
+		minGids, min := cb.min()
 
 		if max-min <= 1 {
-			return
+			break
 		}
 
-		move := cb.assignments[maxGid][len(cb.assignments[maxGid])-1]
+		for len(maxGids) > 0 && len(minGids) > 0 {
+			maxGid := maxGids[0]
+			minGid := minGids[0]
+			shard := cb.assignments[maxGid][0]
 
-		cb.assignments[maxGid] = cb.assignments[maxGid][:len(cb.assignments[maxGid])-1]
-		cb.assignments[minGid] = append(cb.assignments[minGid], move)
+			cb.assignments[maxGid] = cb.assignments[maxGid][1:]
+			cb.assignments[minGid] = append(cb.assignments[minGid], shard)
+
+			maxGids = maxGids[1:]
+			minGids = minGids[1:]
+		}
 	}
 
 }

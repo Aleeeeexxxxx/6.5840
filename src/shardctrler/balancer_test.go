@@ -6,28 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func ConfigShardsEqualOneOf(t *testing.T, cfg *Config, expected [][]int) {
-	shardsEqualArray := func(array []int) bool {
-		if len(array) != len(cfg.Shards) {
-			return false
-		}
-		for i, item := range array {
-			if cfg.Shards[i] != item {
-				return false
-			}
-		}
-		return true
-	}
-
-	for _, array := range expected {
-		if shardsEqualArray(array) {
-			return
-		}
-	}
-
-	t.Fatalf("Shards not equal to any of the expected arrays")
-}
-
 func TestCfgMngr_Balance(t *testing.T) {
 	rq := require.New(t)
 
@@ -71,10 +49,7 @@ func TestCfgMngr_Balance(t *testing.T) {
 
 		rq.Equal(0, cfg.Num)
 		rq.Equal(3, len(cfg.Groups))
-		ConfigShardsEqualOneOf(t, cfg, [][]int{
-			{1, 1, 1, 3, 3, 2, 2, 2, 2, 3},
-			{1, 1, 1, 1, 3, 2, 2, 2, 3, 3},
-		})
+		rq.EqualValues([]int{3, 3, 1, 1, 1, 3, 2, 2, 2, 2}, cfg.Shards)
 	})
 
 	t.Run("several groups, mock 1 leave", func(t *testing.T) {
@@ -88,9 +63,7 @@ func TestCfgMngr_Balance(t *testing.T) {
 
 		rq.Equal(0, cfg.Num)
 		rq.Equal(2, len(cfg.Groups))
-		ConfigShardsEqualOneOf(t, cfg, [][]int{
-			{1, 1, 1, 1, 1, 2, 2, 2, 2, 2},
-		})
+		rq.EqualValues([]int{1, 1, 1, 1, 1, 2, 2, 2, 2, 2}, cfg.Shards)
 	})
 
 	t.Run("former 1 not assigned, has position now", func(t *testing.T) {
@@ -112,9 +85,7 @@ func TestCfgMngr_Balance(t *testing.T) {
 
 		rq.Equal(0, cfg.Num)
 		rq.Equal(10, len(cfg.Groups))
-		ConfigShardsEqualOneOf(t, cfg, [][]int{
-			{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
-		})
+		rq.EqualValues([]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, cfg.Shards)
 	})
 
 	t.Run("former 1 not assigned, no position now", func(t *testing.T) {
@@ -137,8 +108,6 @@ func TestCfgMngr_Balance(t *testing.T) {
 
 		rq.Equal(0, cfg.Num)
 		rq.Equal(11, len(cfg.Groups))
-		ConfigShardsEqualOneOf(t, cfg, [][]int{
-			{1, 2, 3, 4, 5, 6, 7, 8, 9, 11},
-		})
+		rq.EqualValues([]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 11}, cfg.Shards)
 	})
 }
