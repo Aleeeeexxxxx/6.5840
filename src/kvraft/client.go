@@ -77,7 +77,7 @@ func (ck *Clerk) Get(key string) string {
 		Key:      key,
 		Metadata: metadata,
 	}
-	reply := &GetReply{}
+	reply := &CommonReply{}
 
 	ck.call("KVServer.Get", args, reply, logger)
 
@@ -97,7 +97,7 @@ func (ck *Clerk) Get(key string) string {
 // the types of args and reply (including whether they are pointers)
 // must match the declared types of the RPC handler function's
 // arguments. and reply must be passed as a pointer.
-func (ck *Clerk) PutAppend(key string, value string, op string) {
+func (ck *Clerk) PutAppend(key string, value string, op string) string {
 	ck.singleRequestLock.Lock()
 	defer ck.singleRequestLock.Unlock()
 
@@ -121,13 +121,14 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 		Op:       op,
 		Value:    value,
 	}
-	reply := &PutAppendReply{}
+	reply := &CommonReply{}
 
 	ck.call("KVServer.PutAppend", args, reply, logger)
 	logger.Info(
 		"client op: PutAppend succeed",
 		zap.Int(LogLeaderID, ck.getCurrentLeaderID()),
 	)
+	return reply.Value
 }
 
 func (ck *Clerk) Put(key string, value string) {
