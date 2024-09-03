@@ -65,7 +65,7 @@ func (kv *KVServer) Raft() *raft.Raft {
 	return kv.rf
 }
 
-func (kv *KVServer) Get(args GetArgs, reply *GetReply) error {
+func (kv *KVServer) Get(args GetArgs, reply *CommonReply) error {
 	op := Op{
 		Metadata: args.Metadata,
 		Op:       "Get",
@@ -78,7 +78,7 @@ func (kv *KVServer) Get(args GetArgs, reply *GetReply) error {
 	return nil
 }
 
-func (kv *KVServer) PutAppend(args PutAppendArgs, reply *PutAppendReply) error {
+func (kv *KVServer) PutAppend(args PutAppendArgs, reply *CommonReply) error {
 	op := Op{
 		Metadata: args.Metadata,
 		Op:       "Put",
@@ -86,7 +86,7 @@ func (kv *KVServer) PutAppend(args PutAppendArgs, reply *PutAppendReply) error {
 		Key:      args.Key,
 		Value:    args.Value,
 	}
-	_, reply.Err = kv.handleOp(&op)
+	reply.Value, reply.Err = kv.handleOp(&op)
 	reply.Metadata = args.Metadata
 	return nil
 }
@@ -105,7 +105,7 @@ func (kv *KVServer) handleOp(op *Op) (string, Err) {
 
 	if kv.killed() {
 		logger.Info("rejected, server stopped")
-		return "", ErrWrongLeader
+		return "", ErrServerStopped
 	}
 
 	if value, ok := kv.clients.GetOpValue(op.Metadata); ok {

@@ -5,11 +5,12 @@ import (
 )
 
 const (
-	OK              = "OK"
-	ErrNoKey        = "ErrNoKey"
-	ErrWrongLeader  = "ErrWrongLeader"
-	ErrDuplicateReq = "ErrDuplicateReq"
-	ErrTimeout      = "ErrTimeout"
+	OK               = "OK"
+	ErrNoKey         = "ErrNoKey"
+	ErrWrongLeader   = "ErrWrongLeader"
+	ErrDuplicateReq  = "ErrDuplicateReq"
+	ErrTimeout       = "ErrTimeout"
+	ErrServerStopped = "ErrServerStopped"
 )
 
 type Err string
@@ -38,19 +39,6 @@ func (args PutAppendArgs) String() string {
 	)
 }
 
-type PutAppendReply struct {
-	Metadata
-	Err Err
-}
-
-func (reply PutAppendReply) String() string {
-	return fmt.Sprintf("Err:%s // %s", reply.Err, reply.Metadata.String())
-}
-
-func (reply PutAppendReply) Accept() bool {
-	return reply.Err == OK
-}
-
 type GetArgs struct {
 	Metadata
 	Key string
@@ -60,18 +48,18 @@ func (ga GetArgs) String() string {
 	return fmt.Sprintf("Key:%s // %s", ga.Key, ga.Metadata.String())
 }
 
-type GetReply struct {
+type CommonReply struct {
 	Metadata
 	Err   Err
 	Value string
 }
 
-func (gr GetReply) String() string {
-	return fmt.Sprintf("Value:%s // Err:%s // %s", gr.Value, gr.Err, gr.Metadata.String())
+func (cr CommonReply) String() string {
+	return fmt.Sprintf("Value:%s // Err:%s // %s", cr.Value, cr.Err, cr.Metadata.String())
 }
 
-func (gr GetReply) Accept() bool {
-	return gr.Err == OK || gr.Err == ErrNoKey
+func (cr CommonReply) Accept() bool {
+	return cr.Err == OK || cr.Err == ErrNoKey
 }
 
 type Stringfy interface {
