@@ -23,6 +23,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"6.5840/labgob"
@@ -112,6 +113,8 @@ type Raft struct {
 
 	// task specified
 	context *TaskContext
+
+	enablePushEmptyLogWhenBecomeLeader atomic.Bool
 }
 
 func Make(peers []*labrpc.ClientEnd, me int,
@@ -149,6 +152,10 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	go worker.daemon()
 	return worker
+}
+
+func (rf *Raft) EnablePushEmptyLogWhenBecomeLeader() {
+	rf.enablePushEmptyLogWhenBecomeLeader.Store(true)
 }
 
 func (rf *Raft) Timeout() time.Duration {
@@ -470,6 +477,9 @@ func (rf *Raft) become(role RoleType) {
 		rf.role = NewFollower(rf)
 	case RoleLeader:
 		rf.role = NewLeader(rf)
+		if rf.enablePushEmptyLogWhenBecomeLeader.Load() {
+			rf.state.logMngr.AppendNewCommand(rf.state.GetCurrentTerm(), nil)
+		}
 	case RoleCandidate:
 		rf.state.IncrTerm()
 		rf.role = NewCandidate(rf)

@@ -144,6 +144,11 @@ func (kv *KVServer) listen() {
 
 	for msg := range kv.applyCh {
 		if msg.CommandValid {
+			if msg.Command == nil {
+				kv.logger.Info("empty command, skip")
+				continue
+			}
+
 			kv.listenCommand(msg.CommandIndex, msg.Command.(Op))
 
 			if kv.maxraftstate > 0 && kv.persister.RaftStateSize() > kv.maxraftstate {
