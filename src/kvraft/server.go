@@ -36,9 +36,7 @@ type KVServer struct {
 	persister *raft.Persister
 }
 
-func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister, maxraftstate int) *KVServer {
-	// call labgob.Register on structures you want
-	// Go's RPC library to marshall/unmarshall.
+func MakeKvServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister, maxraftstate int, hook Hook) *KVServer {
 	labgob.Register(Op{})
 
 	kv := new(KVServer)
@@ -53,10 +51,18 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	kv.clients = NewClerkStorage(me)
 	kv.requests = NewRequestMngr(me)
-	kv.storage = NewDataStorage(me)
+	kv.storage = NewDataStorage(me, hook)
 
 	go kv.listen()
 	return kv
+}
+
+func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister, maxraftstate int) *KVServer {
+	return MakeKvServer(servers, me, persister, maxraftstate, nil)
+}
+
+func (kv *KVServer) Raft() *raft.Raft {
+	return kv.rf
 }
 
 func (kv *KVServer) Get(args GetArgs, reply *GetReply) error {

@@ -1,53 +1,30 @@
 package shardctrler
 
+import (
+	"fmt"
+	"strconv"
 
-import "6.5840/raft"
-import "6.5840/labrpc"
-import "sync"
-import "6.5840/labgob"
+	"6.5840/kvraft"
+	"6.5840/labrpc"
+	"6.5840/raft"
 
+	"go.uber.org/zap"
+)
 
 type ShardCtrler struct {
-	mu      sync.Mutex
-	me      int
-	rf      *raft.Raft
-	applyCh chan raft.ApplyMsg
+	rf       *raft.Raft
+	kvServer *kvraft.KVServer
+	logger   *zap.Logger
 
-	// Your data here.
-
-	configs []Config // indexed by config num
+	cfg *Config
 }
-
-
-type Op struct {
-	// Your data here.
-}
-
-
-func (sc *ShardCtrler) Join(args *JoinArgs, reply *JoinReply) {
-	// Your code here.
-}
-
-func (sc *ShardCtrler) Leave(args *LeaveArgs, reply *LeaveReply) {
-	// Your code here.
-}
-
-func (sc *ShardCtrler) Move(args *MoveArgs, reply *MoveReply) {
-	// Your code here.
-}
-
-func (sc *ShardCtrler) Query(args *QueryArgs, reply *QueryReply) {
-	// Your code here.
-}
-
 
 // the tester calls Kill() when a ShardCtrler instance won't
 // be needed again. you are not required to do anything
 // in Kill(), but it might be convenient to (for example)
 // turn off debug output from this instance.
 func (sc *ShardCtrler) Kill() {
-	sc.rf.Kill()
-	// Your code here, if desired.
+	sc.kvServer.Kill()
 }
 
 // needed by shardkv tester
@@ -61,16 +38,124 @@ func (sc *ShardCtrler) Raft() *raft.Raft {
 // me is the index of the current server in servers[].
 func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister) *ShardCtrler {
 	sc := new(ShardCtrler)
-	sc.me = me
 
-	sc.configs = make([]Config, 1)
-	sc.configs[0].Groups = map[int][]string{}
-
-	labgob.Register(Op{})
-	sc.applyCh = make(chan raft.ApplyMsg)
-	sc.rf = raft.Make(servers, me, persister, sc.applyCh)
-
-	// Your code here.
+	sc.kvServer = kvraft.MakeKvServer(servers, me, persister, 3000, sc.rewriteOp)
+	sc.rf = sc.kvServer.Raft()
+	sc.logger = GetShardCtrlerLoggerOrPanic("server")
+	sc.cfg = GetDefaultConfig()
 
 	return sc
+}
+
+func (sc *ShardCtrler) rewriteCommandOp(op *kvraft.Op) *kvraft.Op {
+	if op.Op == "Get" {
+		if op.Key == QueryLatestConfigNum {
+			op.Key = sc.cfg.NumString()
+			sc.logger.Info(
+				"rewrite to query latest config num",
+				zap.String("new key", op.Key),
+				zap.Int32(kvraft.LogClerkID, op.Metadata.ClerkID),
+				zap.Int64(kvraft.LogMessageID, op.Metadata.MessageID),
+			)
+		}
+		return op
+	}
+
+	sc.cfg.Num++
+	sc.handleKVRaftOp(op)
+
+	op.Key = sc.cfg.NumString()
+	op.Value = JsonStringfyOrPanic(sc.cfg)
+	return op
+}
+
+func (sc *ShardCtrler) rewriteSnapshotOp(st *kvraft.DataStorage) *kvraft.Op {
+	max := 0
+	var cfgJsonString string
+
+	st.Map(func(k, v string) {
+		num, _ := strconv.Atoi(k)
+		if max < num {
+			max = num
+			cfgJsonString = v
+		}
+	})
+
+	MustJsonUnmarshal(cfgJsonString, sc.cfg)
+	return nil
+}
+
+func (sc *ShardCtrler) rewriteOp(op *kvraft.Op, st *kvraft.DataStorage) *kvraft.Op {
+	if op != nil {
+		return sc.rewriteCommandOp(op)
+	}
+	return sc.rewriteSnapshotOp(st)
+}
+
+func (sc *ShardCtrler) handleKVRaftOp(op *kvraft.Op) {
+	sc.logger.Info(
+		"handle config change",
+		zap.String("type", op.Key),
+		zap.Int32(kvraft.LogClerkID, op.Metadata.ClerkID),
+		zap.Int64(kvraft.LogMessageID, op.Metadata.MessageID),
+	)
+
+	switch op.Key {
+	case OpJoin:
+		var args JoinArgs
+		MustJsonUnmarshal(op.Value, &args)
+
+		for gid, shards := range args.Servers {
+			sc.cfg.Groups[gid] = shards
+		}
+
+	case OpLeave:
+		var args LeaveArgs
+		MustJsonUnmarshal(op.Value, &args)
+
+		for _, gid := range args.GIDs {
+			delete(sc.cfg.Groups, gid)
+
+			for shard, assignTo := range sc.cfg.Shards {
+				if assignTo == gid {
+					sc.cfg.Shards[shard] = unassign
+				}
+			}
+		}
+
+	case OpMove:
+		var args MoveArgs
+		MustJsonUnmarshal(op.Value, &args)
+
+		sc.cfg.Shards[args.Shard] = args.GID
+		return
+	}
+
+	sc.logger.Debug(
+		fmt.Sprintf("config shards before balance, shards=%#v", sc.cfg.Shards),
+		zap.Int32(kvraft.LogClerkID, op.Metadata.ClerkID),
+		zap.Int64(kvraft.LogMessageID, op.Metadata.MessageID),
+	)
+
+	cb := NewConfigBalancer(sc.cfg)
+	cb.Balance()
+
+	sc.logger.Debug(
+		fmt.Sprintf("config shards after balance, shards=%#v", sc.cfg.Shards),
+		zap.Int32(kvraft.LogClerkID, op.Metadata.ClerkID),
+		zap.Int64(kvraft.LogMessageID, op.Metadata.MessageID),
+	)
+}
+
+func GetDefaultConfig() *Config {
+	defaultCfg := &Config{
+		Num:    0,
+		Shards: [NShards]int{},
+		Groups: map[int][]string{},
+	}
+
+	for i := 0; i < NShards; i++ {
+		defaultCfg.Shards[i] = unassign
+	}
+	return defaultCfg
 }
