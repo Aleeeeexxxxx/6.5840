@@ -1,97 +1,142 @@
 package shardkv
 
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
 
-import "6.5840/labrpc"
-import "6.5840/raft"
-import "sync"
-import "6.5840/labgob"
-
-
-
-type Op struct {
-	// Your definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
-}
+	"6.5840/kvraft"
+	"6.5840/labrpc"
+	"6.5840/raft"
+	"6.5840/shardctrler"
+	"go.uber.org/zap"
+)
 
 type ShardKV struct {
-	mu           sync.Mutex
-	me           int
-	rf           *raft.Raft
-	applyCh      chan raft.ApplyMsg
-	make_end     func(string) *labrpc.ClientEnd
-	gid          int
-	ctrlers      []*labrpc.ClientEnd
-	maxraftstate int // snapshot if log grows this big
+	me       int
+	make_end func(string) *labrpc.ClientEnd
 
-	// Your definitions here.
+	shardMngr *ShardsManager
+	kvServer  *kvraft.KVServer
+	logger    *zap.Logger
 }
 
+func (kv *ShardKV) handleShardKVCtrlOp(op *kvraft.Op, st *kvraft.DataStorage) *kvraft.Op {
+	if op.Op == "Get" {
+		panic("ShardKV ctrl op should not be Get op")
+	}
 
-func (kv *ShardKV) Get(args *GetArgs, reply *GetReply) {
-	// Your code here.
+	switch op.Key {
+	case ShardKvUpdateConfig:
+		kv.handleUpdateConfigOp(op, st)
+	case ShardKvAddShard:
+		kv.handleShardKvAddShard(op, st)
+	case ShardKvRemoveShard:
+		kv.handleShardKvRemoveShard(op, st)
+	}
+
+	return op
 }
 
-func (kv *ShardKV) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
-	// Your code here.
+func (kv *ShardKV) handleUpdateConfigOp(op *kvraft.Op, _ *kvraft.DataStorage) {
+	var cfg shardctrler.Config
+	if err := json.NewDecoder(strings.NewReader(op.Value)).Decode(&cfg); err != nil {
+		panic(err)
+	}
+	if ok := kv.shardMngr.HandleUpdateConfig(&cfg); !ok {
+		op.Key = dummy
+		op.Value = dummy
+		return
+	}
+
+	op.Key = ShardKVConfigPrefix + cfg.NumString()
 }
 
-// the tester calls Kill() when a ShardKV instance won't
-// be needed again. you are not required to do anything
-// in Kill(), but it might be convenient to (for example)
-// turn off debug output from this instance.
+func (kv *ShardKV) handleShardKvAddShard(op *kvraft.Op, st *kvraft.DataStorage) {
+	var val ShardOpValue
+	if err := json.NewDecoder(strings.NewReader(op.Value)).Decode(&val); err != nil {
+		panic(err)
+	}
+
+	if ok := kv.shardMngr.HandleAddShard(val.ShardID, val.CfgNum); !ok {
+		op.Key = dummy
+		op.Value = dummy
+		return
+	}
+
+	st.PutNoLock(fmt.Sprintf("%s%d", ShardKVShardDataPrefix, val.ShardID), val.Data)
+
+	op.Key = fmt.Sprintf("%s%d", ShardKVShardStatusPrefix, val.ShardID)
+	op.Value = fmt.Sprintf("%d", val.CfgNum)
+}
+
+func (kv *ShardKV) handleShardKvRemoveShard(op *kvraft.Op, st *kvraft.DataStorage) {
+	var val ShardOpValue
+	if err := json.NewDecoder(strings.NewReader(op.Value)).Decode(&val); err != nil {
+		panic(err)
+	}
+
+	if ok := kv.shardMngr.HandleAddShard(val.ShardID, val.CfgNum); !ok {
+		op.Key = dummy
+		op.Value = dummy
+		return
+	}
+
+	st.DeleteNoLock(fmt.Sprintf("%s%d", ShardKVShardDataPrefix, val.ShardID))
+
+	op.Key = fmt.Sprintf("%s%d", ShardKVShardStatusPrefix, val.ShardID)
+	op.Value = fmt.Sprintf("%d", val.CfgNum)
+}
+
+func (kv *ShardKV) handleCustomerOp(op *kvraft.Op, _ *kvraft.DataStorage) *kvraft.Op {
+	key := op.Key
+	shard := key2shard(key)
+
+	if !kv.shardMngr.IsSharedOK(shard) {
+		op.Key = ShardKVShardUnavailable
+		op.Value = ShardKVShardUnavailable
+	}
+
+	return op
+}
+
 func (kv *ShardKV) Kill() {
-	kv.rf.Kill()
-	// Your code here, if desired.
+	kv.kvServer.Kill()
 }
 
+func (kv *ShardKV) KVServerHook(op *kvraft.Op, st *kvraft.DataStorage) *kvraft.Op {
+	// apply snapshot
+	if st != nil {
+		return nil
+	}
 
-// servers[] contains the ports of the servers in this group.
-//
-// me is the index of the current server in servers[].
-//
-// the k/v server should store snapshots through the underlying Raft
-// implementation, which should call persister.SaveStateAndSnapshot() to
-// atomically save the Raft state along with the snapshot.
-//
-// the k/v server should snapshot when Raft's saved state exceeds
-// maxraftstate bytes, in order to allow Raft to garbage-collect its
-// log. if maxraftstate is -1, you don't need to snapshot.
-//
-// gid is this group's GID, for interacting with the shardctrler.
-//
-// pass ctrlers[] to shardctrler.MakeClerk() so you can send
-// RPCs to the shardctrler.
-//
-// make_end(servername) turns a server name from a
-// Config.Groups[gid][i] into a labrpc.ClientEnd on which you can
-// send RPCs. You'll need this to send RPCs to other groups.
-//
-// look at client.go for examples of how to use ctrlers[]
-// and make_end() to send RPCs to the group owning a specific shard.
-//
-// StartServer() must return quickly, so it should start goroutines
-// for any long-running work.
-func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister, maxraftstate int, gid int, ctrlers []*labrpc.ClientEnd, make_end func(string) *labrpc.ClientEnd) *ShardKV {
-	// call labgob.Register on structures you want
-	// Go's RPC library to marshall/unmarshall.
-	labgob.Register(Op{})
+	// apply command
+	if strings.HasPrefix(op.Key, ShardKVCtrlPrefix) {
+		return kv.handleShardKVCtrlOp(op, st)
+	}
+	return kv.handleCustomerOp(op, st)
+}
+
+func StartServer(
+	servers []*labrpc.ClientEnd,
+	me int,
+	persister *raft.Persister,
+	maxraftstate int,
+	gid int,
+	ctrlers []*labrpc.ClientEnd,
+	make_end func(string) *labrpc.ClientEnd,
+) *ShardKV {
 
 	kv := new(ShardKV)
 	kv.me = me
-	kv.maxraftstate = maxraftstate
 	kv.make_end = make_end
-	kv.gid = gid
-	kv.ctrlers = ctrlers
 
-	// Your initialization code here.
+	kv.logger = GetShardKVLoggerOrPanic("server").
+		With(zap.Int(LogMe, me)).
+		With(zap.Int(LogShardKVGid, gid))
 
-	// Use something like this to talk to the shardctrler:
-	// kv.mck = shardctrler.MakeClerk(kv.ctrlers)
-
-	kv.applyCh = make(chan raft.ApplyMsg)
-	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
-
+	kv.shardMngr = MakeShardsManager(ctrlers, gid)
+	kv.kvServer = kvraft.MakeKvServer(servers, me, persister, maxraftstate, kv.KVServerHook)
 
 	return kv
 }
