@@ -30,18 +30,18 @@ const (
 	dummy     = ShardKVCtrlPrefix + "dummy"
 	Seperator = ".."
 
-	ShardKVConfigPrefix = ShardKVCtrlPrefix + "cfg" + Seperator
-
 	// shard status, data
-	ShardKVShardDataPrefix   = ShardKVCtrlPrefix + "data" + Seperator   //
-	ShardKVShardStatusPrefix = ShardKVCtrlPrefix + "status" + Seperator //
+	ShardKVShardDataPrefix = ShardKVCtrlPrefix + "data" + Seperator //
+	ShardKVShardStatus     = ShardKVCtrlPrefix + "status"
 
 	// shard status, for rpc response
 	ShardKVShardUnavailable = ShardKVCtrlPrefix + "unavailable"
 )
 
 type ShardOpValue struct {
-	CfgNum int
-	ShardID     int
-	Data   string
+	CfgNum  int
+	ShardID int
+	Data    string
 }
+
+type ShardData map[string]string

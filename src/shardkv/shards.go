@@ -1,15 +1,15 @@
 package shardkv
 
 import (
+	"encoding/json"
 	"sync"
 
-	"6.5840/labrpc"
 	"6.5840/shardctrler"
 )
 
 const (
 	OpPulling     = "Pulling"
-	OpCommitting  = "Committing"
+	OpCommitting  = "Committing" // commit to peer, let them delete the shard
 	OpWaitForPull = "Pushing"
 )
 
@@ -33,7 +33,6 @@ func (s Shard) GetCurrentOp() *ShardOp {
 }
 
 type ShardsManager struct {
-	ck  *shardctrler.Clerk
 	gid int
 
 	mutex      sync.Mutex
@@ -41,9 +40,8 @@ type ShardsManager struct {
 	shards     map[int]*Shard // shardId -> Shard
 }
 
-func MakeShardsManager(ctrlers []*labrpc.ClientEnd, gid int) *ShardsManager {
+func MakeShardsManager(gid int) *ShardsManager {
 	sm := &ShardsManager{
-		ck:     shardctrler.MakeClerk(ctrlers),
 		shards: make(map[int]*Shard),
 		gid:    gid,
 	}
@@ -137,8 +135,12 @@ func (sm *ShardsManager) precheckShardOp(id, cfgNum int, targetOp string) (*Shar
 		return nil, false
 	}
 
+	if op.CfgNum != cfgNum {
+		panic("should wait for the same config")
+	}
+
 	if op.Op != targetOp {
-		panic("should wait for pulling")
+		panic("incorrect op")
 	}
 
 	shard.AppliedCfgNum = cfgNum
@@ -168,4 +170,34 @@ func (sm *ShardsManager) HandleRemoveShard(id, cfgNum int) bool {
 		delete(sm.shards, id)
 	}
 	return true
+}
+
+type ShardsManagerState struct {
+	AppliedCfg *shardctrler.Config
+	Shards     map[int]*Shard // shardId -> Shard
+}
+
+func (sm *ShardsManager) Serialize() string {
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+
+	state := ShardsManagerState{
+		AppliedCfg: sm.appliedCfg,
+		Shards:     sm.shards,
+	}
+
+	data, _ := json.Marshal(state)
+	return string(data)
+}
+
+func (sm *ShardsManager) Deserialize(data string) {
+	var state ShardsManagerState
+
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+
+	json.Unmarshal([]byte(data), &state)
+
+	sm.appliedCfg = state.AppliedCfg
+	sm.shards = state.Shards
 }

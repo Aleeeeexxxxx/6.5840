@@ -3,14 +3,13 @@ package shardkv
 import (
 	"testing"
 
-	"6.5840/labrpc"
 	"6.5840/shardctrler"
 	"github.com/stretchr/testify/require"
 )
 
 func TestShardsManager_UpdateCfg(t *testing.T) {
 	rq := require.New(t)
-	sm := MakeShardsManager([]*labrpc.ClientEnd{nil}, 1)
+	sm := MakeShardsManager(1)
 
 	// join
 	ok := sm.HandleUpdateConfig(&shardctrler.Config{
@@ -96,7 +95,7 @@ func TestShardsManager_UpdateCfg(t *testing.T) {
 
 func TestShardsManager_ShardOp(t *testing.T) {
 	rq := require.New(t)
-	sm := MakeShardsManager([]*labrpc.ClientEnd{nil}, 1)
+	sm := MakeShardsManager(1)
 
 	// join
 	ok := sm.HandleUpdateConfig(&shardctrler.Config{
@@ -137,4 +136,41 @@ func TestShardsManager_ShardOp(t *testing.T) {
 	rq.True(ok)
 
 	rq.Nil(sm.shards[1])
+}
+
+func TestShardsManager_Serialize(t *testing.T) {
+	rq := require.New(t)
+	sm := MakeShardsManager(1)
+
+	sm.appliedCfg = &shardctrler.Config{
+		Num: 2,
+	}
+	sm.shards = map[int]*Shard{
+		1: {
+			ShardId:       1,
+			AppliedCfgNum: 1,
+			Seq: []*ShardOp{
+				{
+					CfgNum: 1,
+					Op:     "string",
+					Peer:   1,
+				},
+			},
+		},
+	}
+
+	data := sm.Serialize()
+
+	sm.appliedCfg = nil
+	sm.shards = nil
+
+	sm.Deserialize(data)
+
+	rq.NotNil(sm.appliedCfg)
+	rq.Equal(2, sm.appliedCfg.Num)
+	rq.Equal(1, len(sm.shards))
+	rq.Equal(1, sm.shards[1].ShardId)
+	rq.Equal(1, sm.shards[1].AppliedCfgNum)
+	rq.Equal(1, len(sm.shards[1].Seq))
+	rq.Equal(1, sm.shards[1].Seq[0].CfgNum)
 }
