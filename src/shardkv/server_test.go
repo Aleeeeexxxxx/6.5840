@@ -49,12 +49,10 @@ func TestShardKV_CustomOp(t *testing.T) {
 
 	t.Run("get, shard ok", func(t *testing.T) {
 		op := kv.handleCustomerOp(&kvraft.Op{
-			Op:    "Get",
-			Key:   "aey",
-			SubOp: "Append",
+			Op:  "Get",
+			Key: "aey",
 		}, st)
 
 		rq.Equal("@shardkv//data..7", op.Key)
 	})
-
 }

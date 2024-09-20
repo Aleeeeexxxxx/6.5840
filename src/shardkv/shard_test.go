@@ -45,10 +45,11 @@ func TestShardsManager_UpdateCfg(t *testing.T) {
 	rq.Equal(0, len(sm.shards[0].Seq))
 
 	rq.Equal(1, sm.shards[1].ShardId)
-	rq.Equal(1, len(sm.shards[1].Seq))
+	rq.Equal(2, len(sm.shards[1].Seq))
 	rq.Equal(2, sm.shards[1].Seq[0].CfgNum)
 	rq.Equal(2, sm.shards[1].Seq[0].Peer)
 	rq.Equal(OpPulling, sm.shards[1].Seq[0].Op)
+	rq.Equal(OpCommitting, sm.shards[1].Seq[1].Op)
 
 	// removed assignment
 	ok = sm.HandleUpdateConfig(&shardctrler.Config{
@@ -68,13 +69,19 @@ func TestShardsManager_UpdateCfg(t *testing.T) {
 	rq.Equal(0, len(sm.shards[0].Seq))
 
 	rq.Equal(1, sm.shards[1].ShardId)
-	rq.Equal(2, len(sm.shards[1].Seq))
+	rq.Equal(3, len(sm.shards[1].Seq))
+	// seq 1
 	rq.Equal(2, sm.shards[1].Seq[0].CfgNum)
 	rq.Equal(2, sm.shards[1].Seq[0].Peer)
 	rq.Equal(OpPulling, sm.shards[1].Seq[0].Op)
-	rq.Equal(3, sm.shards[1].Seq[1].CfgNum)
-	rq.Equal(3, sm.shards[1].Seq[1].Peer)
-	rq.Equal(OpWaitForPull, sm.shards[1].Seq[1].Op)
+	// seq 2
+	rq.Equal(2, sm.shards[1].Seq[1].CfgNum)
+	rq.Equal(2, sm.shards[1].Seq[1].Peer)
+	rq.Equal(OpCommitting, sm.shards[1].Seq[1].Op)
+	// seq 3
+	rq.Equal(3, sm.shards[1].Seq[2].CfgNum)
+	rq.Equal(3, sm.shards[1].Seq[2].Peer)
+	rq.Equal(OpWaitForPull, sm.shards[1].Seq[2].Op)
 
 	// no related change
 	ok = sm.HandleUpdateConfig(&shardctrler.Config{
@@ -90,7 +97,7 @@ func TestShardsManager_UpdateCfg(t *testing.T) {
 
 	rq.Equal(2, len(sm.shards))
 	rq.Equal(0, len(sm.shards[0].Seq))
-	rq.Equal(2, len(sm.shards[1].Seq))
+	rq.Equal(3, len(sm.shards[1].Seq))
 }
 
 func TestShardsManager_ShardOp(t *testing.T) {
@@ -117,6 +124,9 @@ func TestShardsManager_ShardOp(t *testing.T) {
 
 	// add a shard
 	ok = sm.HandleAddShard(1, 2)
+	rq.True(ok)
+
+	ok = sm.HandleCommitShard(1, 2)
 	rq.True(ok)
 
 	rq.Equal(0, len(sm.shards[1].Seq))

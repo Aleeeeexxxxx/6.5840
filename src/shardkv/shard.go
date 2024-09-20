@@ -56,7 +56,14 @@ func (sm *ShardsManager) IsSharedOK(id int) bool {
 	if !ok {
 		return false
 	}
-	return shard.GetCurrentOp() == nil
+	cur := shard.GetCurrentOp()
+	if cur == nil {
+		return true
+	}
+	if len(shard.Seq) == 1 && cur.Op == OpCommitting {
+		return true
+	}
+	return false
 }
 
 func (sm *ShardsManager) HandleUpdateConfig(cfg *shardctrler.Config) bool {
@@ -108,11 +115,19 @@ func (sm *ShardsManager) HandleUpdateConfig(cfg *shardctrler.Config) bool {
 					}
 					sm.shards[shardId] = shard
 				}
-				shard.Seq = append(shard.Seq, &ShardOp{
-					CfgNum: cfg.Num,
-					Op:     OpPulling,
-					Peer:   lastAssignedGid,
-				})
+				shard.Seq = append(
+					shard.Seq,
+					&ShardOp{
+						CfgNum: cfg.Num,
+						Op:     OpPulling,
+						Peer:   lastAssignedGid,
+					},
+					&ShardOp{
+						CfgNum: cfg.Num,
+						Op:     OpCommitting,
+						Peer:   lastAssignedGid,
+					},
+				)
 			}
 		}
 	}
@@ -126,8 +141,14 @@ func (sm *ShardsManager) precheckShardOp(id, cfgNum int, targetOp string) (*Shar
 		return nil, false
 	}
 
-	if shard.AppliedCfgNum >= cfgNum {
+	if shard.AppliedCfgNum > cfgNum {
 		return nil, false
+	} else if shard.AppliedCfgNum == cfgNum {
+		if targetOp == OpCommitting {
+
+		} else {
+			return nil, false
+		}
 	}
 
 	op := shard.GetCurrentOp()
@@ -146,6 +167,14 @@ func (sm *ShardsManager) precheckShardOp(id, cfgNum int, targetOp string) (*Shar
 	shard.AppliedCfgNum = cfgNum
 	shard.Seq = shard.Seq[1:]
 	return shard, true
+}
+
+func (sm *ShardsManager) HandleCommitShard(id, cfgNum int) bool {
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+
+	_, ok := sm.precheckShardOp(id, cfgNum, OpCommitting)
+	return ok
 }
 
 func (sm *ShardsManager) HandleAddShard(id, cfgNum int) bool {

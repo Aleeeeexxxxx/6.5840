@@ -116,7 +116,7 @@ func (kv *ShardKV) handleCustomerOp(op *kvraft.Op, st *kvraft.DataStorage) *kvra
 		}
 	}
 
-	switch op.Op {
+	switch op.SubOp {
 	case "Put":
 		data[key] = op.Value
 	case "Append":
@@ -140,6 +140,9 @@ func (kv *ShardKV) Kill() {
 func (kv *ShardKV) KVServerHook(op *kvraft.Op, st *kvraft.DataStorage) *kvraft.Op {
 	// apply snapshot
 	if st != nil {
+		if val, ok := st.GetNoLock(ShardKVShardStatus); ok {
+			kv.shardMngr.Deserialize(val)
+		}
 		return nil
 	}
 

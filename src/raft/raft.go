@@ -115,6 +115,7 @@ type Raft struct {
 	context *TaskContext
 
 	enablePushEmptyLogWhenBecomeLeader atomic.Bool
+	roleChangeHook                     RaftRoleChangeHook
 }
 
 func Make(peers []*labrpc.ClientEnd, me int,
@@ -141,9 +142,10 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		commitTicker:      time.NewTicker(20 * time.Millisecond),
 		buildSnapshotCh:   make(chan *BuildSnapshotTask),
 
-		applyMsgCh:  applyCh,
-		lastApplied: EmptyLogIndex,
-		context:     &TaskContext{stateChanged: false},
+		applyMsgCh:     applyCh,
+		lastApplied:    EmptyLogIndex,
+		context:        &TaskContext{stateChanged: false},
+		roleChangeHook: nil,
 	}
 	worker.role = NewFollower(worker)
 
@@ -156,6 +158,12 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 func (rf *Raft) EnablePushEmptyLogWhenBecomeLeader() {
 	rf.enablePushEmptyLogWhenBecomeLeader.Store(true)
+}
+
+type RaftRoleChangeHook func(role RoleType)
+
+func (rf *Raft) SetRoleChangeHook(hook RaftRoleChangeHook) {
+	rf.roleChangeHook = hook
 }
 
 func (rf *Raft) Timeout() time.Duration {
@@ -483,6 +491,10 @@ func (rf *Raft) become(role RoleType) {
 	case RoleCandidate:
 		rf.state.IncrTerm()
 		rf.role = NewCandidate(rf)
+	}
+
+	if rf.roleChangeHook != nil {
+		rf.roleChangeHook(role)
 	}
 
 	go rf.role.StartDaemon()
