@@ -41,7 +41,6 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister)
 
 	sc.kvServer = kvraft.MakeKvServer(servers, me, persister, 3000, sc.rewriteOp)
 	sc.rf = sc.kvServer.Raft()
-	sc.rf.EnablePushEmptyLogWhenBecomeLeader()
 
 	sc.logger = GetShardCtrlerLoggerOrPanic("server")
 	sc.cfg = GetDefaultConfig()

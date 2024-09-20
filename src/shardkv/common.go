@@ -18,27 +18,30 @@ const (
 
 type Err string
 
-// Put or Append
-type PutAppendArgs struct {
-	// You'll have to add definitions here.
-	Key   string
-	Value string
-	Op    string // "Put" or "Append"
-	// You'll have to add definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
+const (
+	ShardKVCtrlPrefix = "@shardkv//"
+
+	/* key for kvraft.Op */
+	ShardKvUpdateConfig = ShardKVCtrlPrefix + "cfg"      // -> config json
+	ShardKvAddShard     = ShardKVCtrlPrefix + "addshard" // -> fully data of shard
+	ShardKvRemoveShard  = ShardKVCtrlPrefix + "rmshard"
+
+	/* k/v in storage */
+	dummy     = ShardKVCtrlPrefix + "dummy"
+	Seperator = ".."
+
+	// shard status, data
+	ShardKVShardDataPrefix = ShardKVCtrlPrefix + "data" + Seperator //
+	ShardKVShardStatus     = ShardKVCtrlPrefix + "status"
+
+	// shard status, for rpc response
+	ShardKVShardUnavailable = ShardKVCtrlPrefix + "unavailable"
+)
+
+type ShardOpValue struct {
+	CfgNum  int
+	ShardID int
+	Data    string
 }
 
-type PutAppendReply struct {
-	Err Err
-}
-
-type GetArgs struct {
-	Key string
-	// You'll have to add definitions here.
-}
-
-type GetReply struct {
-	Err   Err
-	Value string
-}
+type ShardData map[string]string

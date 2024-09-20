@@ -165,34 +165,43 @@ func (st *DataStorage) ApplyCommand(index int, command *Op) (string, Err) {
 		switch command.SubOp {
 		case "Append":
 			logger.Debug(fmt.Sprintf("Append [%s] to [%s]", command.Value, command.Key))
-			st.putAppend(command.Key, command.Value)
+			st.PutAppendNoLock(command.Key, command.Value)
 		case "Put":
 			logger.Debug(fmt.Sprintf("Put [%s] to [%s]", command.Value, command.Key))
-			st.put(command.Key, command.Value)
+			st.PutNoLock(command.Key, command.Value)
 		}
 	}
 
 	logger.Info("command applied", zap.String("value", st.data[command.Key]))
 	// st.LogStatusOfStorage(logger)
 
-	val, ok := st.data[command.Key]
+	val, ok := st.GetNoLock(command.Key)
 	if !ok {
 		return "", ErrNoKey
 	}
 	return val, OK
 }
 
-func (st *DataStorage) put(key, val string) {
+func (st *DataStorage) PutNoLock(key, val string) {
 	st.data[key] = val
 }
 
-func (st *DataStorage) putAppend(key, val string) {
+func (st *DataStorage) PutAppendNoLock(key, val string) {
 	v, ok := st.data[key]
 	if !ok {
 		st.data[key] = val
 	} else {
 		st.data[key] = fmt.Sprintf("%s%s", v, val)
 	}
+}
+
+func (st *DataStorage) GetNoLock(key string) (string, bool) {
+	v, ok := st.data[key]
+	return v, ok
+}
+
+func (st *DataStorage) DeleteNoLock(key string) {
+	delete(st.data, key)
 }
 
 func (st *DataStorage) LogStatusOfStorage(logger *zap.Logger) {
