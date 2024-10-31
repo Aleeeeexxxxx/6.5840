@@ -10,7 +10,7 @@ import (
 func TestShardKV_CustomOp(t *testing.T) {
 	rq := require.New(t)
 
-	sm := MakeShardsManager(1)
+	sm := MakeShardsManager(1, nil, nil, nil)
 	sm.shards = map[int]*Shard{
 		7: {
 			ShardId:       7,

@@ -1,5 +1,7 @@
 package shardkv
 
+import "strings"
+
 //
 // Sharded key/value server.
 // Lots of replica groups, each running Raft.
@@ -37,6 +39,10 @@ const (
 	// shard status, for rpc response
 	ShardKVShardUnavailable = ShardKVCtrlPrefix + "unavailable"
 )
+
+func IsShardKVCtrlOp(op string) bool {
+	return strings.HasPrefix(op, ShardKVCtrlPrefix)
+}
 
 type ShardOpValue struct {
 	CfgNum  int

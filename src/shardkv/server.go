@@ -1,6 +1,7 @@
 package shardkv
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -20,6 +21,8 @@ type ShardKV struct {
 	shardMngr *ShardsManager
 	kvServer  *kvraft.KVServer
 	logger    *zap.Logger
+
+	leaderDaemonCancelFn context.CancelFunc
 }
 
 func (kv *ShardKV) handleShardKVCtrlOp(op *kvraft.Op, st *kvraft.DataStorage) *kvraft.Op {
@@ -135,6 +138,9 @@ func (kv *ShardKV) handleCustomerOp(op *kvraft.Op, st *kvraft.DataStorage) *kvra
 
 func (kv *ShardKV) Kill() {
 	kv.kvServer.Kill()
+	if kv.leaderDaemonCancelFn != nil {
+		kv.leaderDaemonCancelFn()
+	}
 }
 
 func (kv *ShardKV) KVServerHook(op *kvraft.Op, st *kvraft.DataStorage) *kvraft.Op {
@@ -171,10 +177,23 @@ func StartServer(
 		With(zap.Int(LogMe, me)).
 		With(zap.Int(LogShardKVGid, gid))
 
-	kv.ck = shardctrler.MakeClerk(ctrlers)
-
-	kv.shardMngr = MakeShardsManager(gid)
 	kv.kvServer = kvraft.MakeKvServer(servers, me, persister, maxraftstate, kv.KVServerHook)
+	kv.shardMngr = MakeShardsManager(gid, make_end, shardctrler.MakeClerk(ctrlers), kv.kvServer.Raft())
+
+	kv.kvServer.Raft().SetRoleChangeHook(func(role raft.RoleType) {
+		if kv.leaderDaemonCancelFn != nil {
+			kv.leaderDaemonCancelFn()
+			kv.leaderDaemonCancelFn = nil
+		}
+
+		if role == raft.RoleLeader {
+			kv.logger.Info("start leader hook")
+			ctx, cancel := context.WithCancel(context.Background())
+			kv.leaderDaemonCancelFn = cancel
+
+			kv.shardMngr.runLeaderDaemon(ctx)
+		}
+	})
 
 	return kv
 }

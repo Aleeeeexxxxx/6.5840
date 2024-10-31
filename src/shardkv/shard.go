@@ -3,7 +3,10 @@ package shardkv
 import (
 	"encoding/json"
 	"sync"
+	"time"
 
+	"6.5840/labrpc"
+	"6.5840/raft"
 	"6.5840/shardctrler"
 )
 
@@ -14,9 +17,10 @@ const (
 )
 
 type ShardOp struct {
-	CfgNum int
-	Op     string
-	Peer   int // gid
+	CfgNum  int
+	Op      string
+	Peer    int      // gid
+	Servers []string // gid -> servers
 }
 
 type Shard struct {
@@ -38,12 +42,30 @@ type ShardsManager struct {
 	mutex      sync.Mutex
 	appliedCfg *shardctrler.Config
 	shards     map[int]*Shard // shardId -> Shard
+
+	raft *raft.Raft
+
+	cfgQueryInterval time.Duration
+	cfgCilent        *shardctrler.Clerk
+
+	shardSyncInterval time.Duration
+	clerk             *Clerk
 }
 
-func MakeShardsManager(gid int) *ShardsManager {
+func MakeShardsManager(
+	gid int,
+	make_end func(string) *labrpc.ClientEnd,
+	cfgCilent *shardctrler.Clerk,
+	raft *raft.Raft,
+) *ShardsManager {
 	sm := &ShardsManager{
-		shards: make(map[int]*Shard),
-		gid:    gid,
+		shards:            make(map[int]*Shard),
+		gid:               gid,
+		cfgCilent:         cfgCilent,
+		cfgQueryInterval:  100 * time.Millisecond,
+		clerk:             makeClerk(cfgCilent, make_end),
+		shardSyncInterval: 100 * time.Millisecond,
+		raft:              raft,
 	}
 	return sm
 }
@@ -100,9 +122,10 @@ func (sm *ShardsManager) HandleUpdateConfig(cfg *shardctrler.Config) bool {
 					panic("shard should exist")
 				}
 				shard.Seq = append(shard.Seq, &ShardOp{
-					CfgNum: cfg.Num,
-					Op:     OpWaitForPull,
-					Peer:   curAssignedGid,
+					CfgNum:  cfg.Num,
+					Op:      OpWaitForPull,
+					Peer:    curAssignedGid,
+					Servers: cfg.Groups[curAssignedGid],
 				})
 			}
 
@@ -118,14 +141,16 @@ func (sm *ShardsManager) HandleUpdateConfig(cfg *shardctrler.Config) bool {
 				shard.Seq = append(
 					shard.Seq,
 					&ShardOp{
-						CfgNum: cfg.Num,
-						Op:     OpPulling,
-						Peer:   lastAssignedGid,
+						CfgNum:  cfg.Num,
+						Op:      OpPulling,
+						Peer:    lastAssignedGid,
+						Servers: cfg.Groups[lastAssignedGid],
 					},
 					&ShardOp{
-						CfgNum: cfg.Num,
-						Op:     OpCommitting,
-						Peer:   lastAssignedGid,
+						CfgNum:  cfg.Num,
+						Op:      OpCommitting,
+						Peer:    lastAssignedGid,
+						Servers: cfg.Groups[lastAssignedGid],
 					},
 				)
 			}

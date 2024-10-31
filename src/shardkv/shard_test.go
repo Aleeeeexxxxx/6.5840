@@ -9,7 +9,7 @@ import (
 
 func TestShardsManager_UpdateCfg(t *testing.T) {
 	rq := require.New(t)
-	sm := MakeShardsManager(1)
+	sm := MakeShardsManager(1, nil, nil, nil)
 
 	// join
 	ok := sm.HandleUpdateConfig(&shardctrler.Config{
@@ -102,7 +102,7 @@ func TestShardsManager_UpdateCfg(t *testing.T) {
 
 func TestShardsManager_ShardOp(t *testing.T) {
 	rq := require.New(t)
-	sm := MakeShardsManager(1)
+	sm := MakeShardsManager(1, nil, nil, nil)
 
 	// join
 	ok := sm.HandleUpdateConfig(&shardctrler.Config{
@@ -150,7 +150,7 @@ func TestShardsManager_ShardOp(t *testing.T) {
 
 func TestShardsManager_Serialize(t *testing.T) {
 	rq := require.New(t)
-	sm := MakeShardsManager(1)
+	sm := MakeShardsManager(1, nil, nil, nil)
 
 	sm.appliedCfg = &shardctrler.Config{
 		Num: 2,
