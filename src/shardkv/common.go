@@ -1,5 +1,7 @@
 package shardkv
 
+import "strings"
+
 //
 // Sharded key/value server.
 // Lots of replica groups, each running Raft.
@@ -18,27 +20,35 @@ const (
 
 type Err string
 
-// Put or Append
-type PutAppendArgs struct {
-	// You'll have to add definitions here.
-	Key   string
-	Value string
-	Op    string // "Put" or "Append"
-	// You'll have to add definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
+const (
+	ShardKVCtrlPrefix = "@shardkv//"
+
+	/* key for kvraft.Op */
+	ShardKvUpdateConfig  = ShardKVCtrlPrefix + "cfg"      // -> config json
+	ShardKvAddShard      = ShardKVCtrlPrefix + "addshard" // -> fully data of shard
+	ShardKvRemoveShard   = ShardKVCtrlPrefix + "rmshard"
+	ShardKvCommitPulling = ShardKVCtrlPrefix + "pulled"
+
+	/* k/v in storage */
+	dummy     = ShardKVCtrlPrefix + "dummy"
+	Seperator = ".."
+
+	// shard status, data
+	ShardKVShardDataPrefix = ShardKVCtrlPrefix + "data" + Seperator //
+	ShardKVShardStatus     = ShardKVCtrlPrefix + "status"
+
+	// shard status, for rpc response
+	ShardKVShardUnavailable = ShardKVCtrlPrefix + "unavailable"
+)
+
+func IsShardKVCtrlOp(op string) bool {
+	return strings.HasPrefix(op, ShardKVCtrlPrefix)
 }
 
-type PutAppendReply struct {
-	Err Err
+type ShardOpValue struct {
+	CfgNum  int
+	ShardID int
+	Data    string
 }
 
-type GetArgs struct {
-	Key string
-	// You'll have to add definitions here.
-}
-
-type GetReply struct {
-	Err   Err
-	Value string
-}
+type ShardData map[string]string
