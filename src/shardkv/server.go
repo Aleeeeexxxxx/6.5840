@@ -17,7 +17,6 @@ type ShardKV struct {
 	me       int
 	make_end func(string) *labrpc.ClientEnd
 
-	ck        *shardctrler.Clerk
 	shardMngr *ShardsManager
 	kvServer  *kvraft.KVServer
 	logger    *zap.Logger
@@ -33,15 +32,48 @@ func (kv *ShardKV) handleShardKVCtrlOp(op *kvraft.Op, st *kvraft.DataStorage) *k
 	switch op.Key {
 	case ShardKvUpdateConfig:
 		kv.handleUpdateConfigOp(op, st)
+
 	case ShardKvAddShard:
-		kv.handleShardKvAddShard(op, st)
+		kv.handleShardKvCtrlOp(op, st,
+			kv.shardMngr.HandleAddShard,
+			func(val ShardOpValue, st *kvraft.DataStorage) {
+				st.PutNoLock(fmt.Sprintf("%s%d", ShardKVShardDataPrefix, val.ShardID), val.Data)
+			},
+		)
 	case ShardKvRemoveShard:
-		kv.handleShardKvRemoveShard(op, st)
+		kv.handleShardKvCtrlOp(op, st,
+			kv.shardMngr.HandleAddShard,
+			func(val ShardOpValue, st *kvraft.DataStorage) {
+				st.DeleteNoLock(fmt.Sprintf("%s%d", ShardKVShardDataPrefix, val.ShardID))
+			},
+		)
+	case ShardKvCommitPulling:
+		kv.handleShardKvCtrlOp(op, st, kv.shardMngr.HandleCommitShard, nil)
 	default:
 		panic("unknown shard kv ctrl op")
 	}
 
 	return op
+}
+
+func (kv *ShardKV) handleShardKvCtrlOp(
+	op *kvraft.Op,
+	st *kvraft.DataStorage,
+	shareMngrHandler func(shardId int, cfgNum int) bool,
+	storageHandler func(val ShardOpValue, st *kvraft.DataStorage),
+) {
+	var val ShardOpValue
+	shardctrler.MustJsonUnmarshal(op.Value, &val)
+
+	if shareMngrHandler(val.ShardID, val.CfgNum) {
+		storageHandler(val, st)
+
+		op.Key = ShardKVShardStatus
+		op.Value = kv.shardMngr.Serialize()
+	} else {
+		op.Key = dummy
+		op.Value = dummy
+	}
 }
 
 func (kv *ShardKV) handleUpdateConfigOp(op *kvraft.Op, _ *kvraft.DataStorage) {
@@ -54,42 +86,6 @@ func (kv *ShardKV) handleUpdateConfigOp(op *kvraft.Op, _ *kvraft.DataStorage) {
 		op.Value = dummy
 		return
 	}
-
-	op.Key = ShardKVShardStatus
-	op.Value = kv.shardMngr.Serialize()
-}
-
-func (kv *ShardKV) handleShardKvAddShard(op *kvraft.Op, st *kvraft.DataStorage) {
-	var val ShardOpValue
-	if err := json.NewDecoder(strings.NewReader(op.Value)).Decode(&val); err != nil {
-		panic(err)
-	}
-
-	if ok := kv.shardMngr.HandleAddShard(val.ShardID, val.CfgNum); !ok {
-		op.Key = dummy
-		op.Value = dummy
-		return
-	}
-
-	st.PutNoLock(fmt.Sprintf("%s%d", ShardKVShardDataPrefix, val.ShardID), val.Data)
-
-	op.Key = ShardKVShardStatus
-	op.Value = kv.shardMngr.Serialize()
-}
-
-func (kv *ShardKV) handleShardKvRemoveShard(op *kvraft.Op, st *kvraft.DataStorage) {
-	var val ShardOpValue
-	if err := json.NewDecoder(strings.NewReader(op.Value)).Decode(&val); err != nil {
-		panic(err)
-	}
-
-	if ok := kv.shardMngr.HandleRemoveShard(val.ShardID, val.CfgNum); !ok {
-		op.Key = dummy
-		op.Value = dummy
-		return
-	}
-
-	st.DeleteNoLock(fmt.Sprintf("%s%d", ShardKVShardDataPrefix, val.ShardID))
 
 	op.Key = ShardKVShardStatus
 	op.Value = kv.shardMngr.Serialize()

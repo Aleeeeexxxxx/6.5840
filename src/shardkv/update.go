@@ -2,6 +2,7 @@ package shardkv
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -69,9 +70,9 @@ func (sm *ShardsManager) loopSyncShards(ctx context.Context) {
 
 					var raftOp *kvraft.Op
 					if op.Op == OpPulling {
-						raftOp = sm.syncPull(op)
+						raftOp = sm.syncPull(n, op)
 					} else {
-						raftOp = sm.syncCommit(op)
+						raftOp = sm.syncCommit(n, op)
 					}
 
 					sm.raft.Start(raftOp)
@@ -83,12 +84,43 @@ func (sm *ShardsManager) loopSyncShards(ctx context.Context) {
 	})
 }
 
-func (sm *ShardsManager) syncPull(op ShardOp) *kvraft.Op {
-	return nil
+func (sm *ShardsManager) syncPull(shardId int, op ShardOp) *kvraft.Op {
+	ck := kvraft.MakeClerk(sm.make_ends(op.Servers))
+
+	raw := ck.Get(fmt.Sprintf("%d", shardId))
+
+	opValue := ShardOpValue{
+		CfgNum:  op.CfgNum,
+		ShardID: shardId,
+		Data:    raw,
+	}
+
+	return &kvraft.Op{
+		Op:    "Put",
+		Key:   ShardKvAddShard,
+		Value: shardctrler.JsonStringfyOrPanic(opValue),
+	}
 }
 
-func (sm *ShardsManager) syncCommit(op ShardOp) *kvraft.Op {
-	return nil
+func (sm *ShardsManager) syncCommit(shardId int, op ShardOp) *kvraft.Op {
+	ck := kvraft.MakeClerk(sm.make_ends(op.Servers))
+
+	remoteOpValue := ShardOpValue{
+		CfgNum:  op.CfgNum,
+		ShardID: shardId,
+	}
+	ck.Put(ShardKvRemoveShard, shardctrler.JsonStringfyOrPanic(remoteOpValue))
+
+	commitOpValue := ShardOpValue{
+		CfgNum:  op.CfgNum,
+		ShardID: shardId,
+	}
+
+	return &kvraft.Op{
+		Op:    "Put",
+		Key:   ShardKvCommitPulling,
+		Value: shardctrler.JsonStringfyOrPanic(commitOpValue),
+	}
 }
 
 func loop(ctx context.Context, interval time.Duration, step func() bool) {
@@ -107,4 +139,7 @@ LOOP:
 			}
 		}
 	}
+}
+
+type ShardKVCtrlClerk struct {
 }

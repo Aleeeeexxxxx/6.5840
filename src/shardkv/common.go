@@ -24,9 +24,10 @@ const (
 	ShardKVCtrlPrefix = "@shardkv//"
 
 	/* key for kvraft.Op */
-	ShardKvUpdateConfig = ShardKVCtrlPrefix + "cfg"      // -> config json
-	ShardKvAddShard     = ShardKVCtrlPrefix + "addshard" // -> fully data of shard
-	ShardKvRemoveShard  = ShardKVCtrlPrefix + "rmshard"
+	ShardKvUpdateConfig  = ShardKVCtrlPrefix + "cfg"      // -> config json
+	ShardKvAddShard      = ShardKVCtrlPrefix + "addshard" // -> fully data of shard
+	ShardKvRemoveShard   = ShardKVCtrlPrefix + "rmshard"
+	ShardKvCommitPulling = ShardKVCtrlPrefix + "pulled"
 
 	/* k/v in storage */
 	dummy     = ShardKVCtrlPrefix + "dummy"

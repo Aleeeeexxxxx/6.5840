@@ -49,7 +49,7 @@ type ShardsManager struct {
 	cfgCilent        *shardctrler.Clerk
 
 	shardSyncInterval time.Duration
-	clerk             *Clerk
+	make_ends         func([]string) []*labrpc.ClientEnd
 }
 
 func MakeShardsManager(
@@ -58,12 +58,13 @@ func MakeShardsManager(
 	cfgCilent *shardctrler.Clerk,
 	raft *raft.Raft,
 ) *ShardsManager {
+
 	sm := &ShardsManager{
 		shards:            make(map[int]*Shard),
 		gid:               gid,
 		cfgCilent:         cfgCilent,
 		cfgQueryInterval:  100 * time.Millisecond,
-		clerk:             makeClerk(cfgCilent, make_end),
+		make_ends:         make_ends(make_end),
 		shardSyncInterval: 100 * time.Millisecond,
 		raft:              raft,
 	}
